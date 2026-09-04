@@ -80,6 +80,24 @@ export default function HomePage() {
         <Button onClick={() => setModalOpen(true)}>{t.home.createDeck}</Button>
       </div>
 
+      {/* Math Practice card */}
+      <Link href="/math" className="mb-6 block no-underline">
+        <Card className="transition-colors hover:border-[var(--color-accent)] bg-[var(--color-accent-muted)]/30">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-[var(--color-accent)] text-white">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M17 14v6M14 17h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-base font-medium text-[var(--color-text-primary)]">{t.math.navTitle}</h2>
+              <p className="text-xs text-[var(--color-text-secondary)]">{t.math.navDescription}</p>
+            </div>
+          </div>
+        </Card>
+      </Link>
+
       {error && (
         <Alert variant="error" className="mb-6">
           {error}

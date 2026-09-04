@@ -10,7 +10,7 @@ import {
 import type { QuizQuestion } from "@/lib/quiz";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -20,7 +20,11 @@ export async function GET(
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  const active = getActiveQuizSession(id);
+  const modeParam = new URL(request.url).searchParams.get("mode");
+  const mode =
+    modeParam === "written" ? "written" : modeParam === "choice" ? "choice" : undefined;
+
+  const active = getActiveQuizSession(id, mode);
   if (!active) {
     return NextResponse.json({ session: null });
   }
@@ -33,6 +37,7 @@ export async function GET(
       currentIndex: active.currentIndex,
       score: active.score,
       wrongCardIds: active.wrongCardIds,
+      mode: active.mode,
     },
   });
 }
@@ -51,12 +56,13 @@ export async function POST(
   const body = await request.json();
   const questions = body.questions as QuizQuestion[] | undefined;
   const questionCount = body.questionCount as number | undefined;
+  const mode = body.mode === "written" ? "written" : "choice";
 
   if (!questions || questions.length === 0) {
     return NextResponse.json({ error: "questions are required" }, { status: 400 });
   }
 
-  const session = startQuizSession(deckId, questions, questionCount ?? questions.length);
+  const session = startQuizSession(deckId, questions, questionCount ?? questions.length, mode);
 
   return NextResponse.json({
     session: {
@@ -66,6 +72,7 @@ export async function POST(
       currentIndex: session.currentIndex,
       score: session.score,
       wrongCardIds: session.wrongCardIds,
+      mode: session.mode,
     },
   });
 }

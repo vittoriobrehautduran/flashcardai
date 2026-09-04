@@ -59,6 +59,7 @@ export const quizSessions = sqliteTable("quiz_sessions", {
   currentIndex: integer("current_index").notNull().default(0),
   score: integer("score").notNull().default(0),
   wrongCardIdsJson: text("wrong_card_ids_json").notNull().default("[]"),
+  mode: text("mode").notNull().default("choice"),
   startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
   completedAt: integer("completed_at", { mode: "timestamp" }),
 });

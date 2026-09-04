@@ -41,9 +41,11 @@ export default function ImportPage() {
   const [generatedCards, setGeneratedCards] = useState<GeneratedCard[]>([]);
   const [genProgress, setGenProgress] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [ocrNote, setOcrNote] = useState<string | null>(null);
 
   async function handleFileSelect(file: File) {
     setError(null);
+    setOcrNote(null);
     setExtracting(true);
 
     try {
@@ -59,6 +61,17 @@ export default function ImportPage() {
       setChunks(data.chunks);
       setPreviewText(data.text.slice(0, 3000));
       setCardLanguage(locale);
+
+      if (data.usedOcr) {
+        if (data.usedGeminiVision) {
+          setOcrNote(t.import.ocrGemini);
+        } else if (data.ocrPages?.length === data.pageCount) {
+          setOcrNote(t.import.ocrScanned);
+        } else {
+          setOcrNote(fmt(t.import.ocrUsed, { count: data.ocrPages?.length ?? 0 }));
+        }
+      }
+
       setStep("preview");
     } catch (e) {
       setError(e instanceof Error ? e.message : t.import.failedExtract);
@@ -106,6 +119,11 @@ export default function ImportPage() {
       }
 
       setGenProgress(Math.round(((i + 1) / chunksToProcess.length) * 100));
+
+      // Free-tier Gemini allows ~10 requests/min — pace multi-chunk generation.
+      if (i < chunksToProcess.length - 1) {
+        await new Promise((r) => setTimeout(r, 7000));
+      }
     }
 
     setGeneratedCards(allCards);
@@ -168,13 +186,14 @@ export default function ImportPage() {
         <FileUpload
           onFileSelect={handleFileSelect}
           disabled={extracting}
-          label={extracting ? t.import.extracting : t.import.uploadLabel}
+          label={extracting ? t.import.extractingOcr : t.import.uploadLabel}
           hint={t.import.uploadHint}
         />
       )}
 
       {step === "preview" && (
         <div className="space-y-6">
+          {ocrNote && <Alert variant="success">{ocrNote}</Alert>}
           <Alert variant="info">
             {chunks.length > 1
               ? fmt(t.import.longDocument, { count: chunks.length })

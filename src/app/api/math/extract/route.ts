@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { chunkText } from "@/lib/chunk-text";
 import { extractTextFromPdf } from "@/lib/pdf";
+import { extractOrGenerateExercises, formatAiError } from "@/lib/math";
 
 export async function POST(request: Request) {
+  let language: "en" | "sv" = "sv";
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");
+    language = (formData.get("language") as string) === "en" ? "en" : "sv";
 
     if (!file || !(file instanceof File)) {
       return NextResponse.json({ error: "PDF file is required" }, { status: 400 });
@@ -16,28 +19,23 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const { text, pageCount, usedOcr, usedGeminiVision, ocrPages } = await extractTextFromPdf(buffer);
+    const { text } = await extractTextFromPdf(buffer);
 
     if (!text.trim()) {
       return NextResponse.json(
-        { error: "No text found in PDF after text extraction and OCR." },
+        { error: "No text found in the PDF." },
         { status: 400 }
       );
     }
 
-    const chunks = chunkText(text);
+    // Limit text to ~20k chars to stay within context limits and reduce token usage.
+    const trimmedText = text.slice(0, 20000);
 
-    return NextResponse.json({
-      text,
-      charCount: text.length,
-      chunks,
-      pageCount,
-      usedOcr,
-      usedGeminiVision,
-      ocrPages,
-    });
+    const result = await extractOrGenerateExercises(trimmedText, language);
+
+    return NextResponse.json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to extract PDF";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { message, status } = formatAiError(error, language);
+    return NextResponse.json({ error: message }, { status });
   }
 }

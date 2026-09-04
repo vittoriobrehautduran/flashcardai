@@ -10,14 +10,16 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Alert } from "@/components/ui/Alert";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
-  buildQuizQuestions,
+  buildWrittenQuestions,
   canRunMultipleChoiceQuiz,
+  canRunWrittenQuiz,
   getQuizQuestionCountOptions,
   type QuizQuestion,
 } from "@/lib/quiz";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
 type Phase = "setup" | "playing" | "results";
+type QuizMode = "choice" | "written";
 
 interface QuizCard {
   id: string;
@@ -32,6 +34,22 @@ interface SavedQuizSession {
   currentIndex: number;
   score: number;
   wrongCardIds: string[];
+  mode: QuizMode;
+}
+
+interface WrittenEvaluation {
+  scorePercent: number;
+  isCorrect: boolean;
+  feedback: string;
+  betterAnswer: string;
+}
+
+interface WrittenWrong {
+  cardId: string;
+  prompt: string;
+  correctAnswer: string;
+  userAnswer: string;
+  evaluation: WrittenEvaluation;
 }
 
 function wrongQuestionsFromIds(questions: QuizQuestion[], ids: string[]) {
@@ -40,7 +58,7 @@ function wrongQuestionsFromIds(questions: QuizQuestion[], ids: string[]) {
 }
 
 export default function QuizPage() {
-  const { t, fmt } = useLocale();
+  const { t, fmt, locale } = useLocale();
   const params = useParams();
   const deckId = params.id as string;
 
@@ -49,8 +67,10 @@ export default function QuizPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [quizMode, setQuizMode] = useState<QuizMode>("choice");
   const [phase, setPhase] = useState<Phase>("setup");
   const [questionCount, setQuestionCount] = useState(5);
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [savedSession, setSavedSession] = useState<SavedQuizSession | null>(null);
@@ -59,6 +79,11 @@ export default function QuizPage() {
   const [score, setScore] = useState(0);
   const [wrongAnswers, setWrongAnswers] = useState<QuizQuestion[]>([]);
   const [wrongCardIds, setWrongCardIds] = useState<string[]>([]);
+  const [writtenWrong, setWrittenWrong] = useState<WrittenWrong[]>([]);
+
+  const [userAnswer, setUserAnswer] = useState("");
+  const [evaluating, setEvaluating] = useState(false);
+  const [evaluation, setEvaluation] = useState<WrittenEvaluation | null>(null);
 
   const loadDeck = useCallback(async () => {
     setLoading(true);
@@ -75,11 +100,15 @@ export default function QuizPage() {
         setQuestionCount(options[options.length - 1]);
       }
 
-      const sessionRes = await fetch(`/api/decks/${deckId}/quiz/session`);
-      if (sessionRes.ok) {
-        const sessionData = await sessionRes.json();
-        if (sessionData.session) {
-          setSavedSession(sessionData.session);
+      const sessionRes = await fetch(`/api/decks/${deckId}/quiz/session?mode=choice`);
+      const sessionData = await sessionRes.json();
+      if (sessionData.session?.mode === "choice") {
+        setSavedSession(sessionData.session);
+      } else {
+        const writtenRes = await fetch(`/api/decks/${deckId}/quiz/session?mode=written`);
+        const writtenData = await writtenRes.json();
+        if (writtenData.session?.mode === "written") {
+          setSavedSession(writtenData.session);
         }
       }
     } catch (e) {
@@ -114,29 +143,63 @@ export default function QuizPage() {
     });
   }
 
-  async function startNewQuiz() {
-    const built = buildQuizQuestions(allCards, questionCount);
+  async function createSession(questionsToUse: QuizQuestion[], mode: QuizMode) {
     const res = await fetch(`/api/decks/${deckId}/quiz/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ questions: built, questionCount }),
+      body: JSON.stringify({
+        questions: questionsToUse,
+        questionCount: questionsToUse.length,
+        mode,
+      }),
     });
 
-    if (!res.ok) {
-      setError(t.quiz.failedLoad);
-      return;
-    }
+    if (!res.ok) throw new Error(t.quiz.failedLoad);
+    return res.json();
+  }
 
-    const data = await res.json();
-    setSessionId(data.session.id);
-    setQuestions(data.session.questions);
-    setCurrentIndex(0);
-    setSelectedOptionId(null);
-    setScore(0);
-    setWrongAnswers([]);
-    setWrongCardIds([]);
-    setSavedSession(null);
-    setPhase("playing");
+  async function startNewQuiz() {
+    setError(null);
+    setGeneratingQuiz(true);
+
+    try {
+      let built: QuizQuestion[];
+
+      if (quizMode === "written") {
+        built = buildWrittenQuestions(allCards, questionCount);
+      } else {
+        const genRes = await fetch("/api/quiz/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cards: allCards,
+            questionCount,
+            language: locale,
+          }),
+        });
+        const genData = await genRes.json();
+        if (!genRes.ok) throw new Error(genData.error ?? t.quiz.failedLoad);
+        built = genData.questions;
+      }
+
+      const data = await createSession(built, quizMode);
+      setSessionId(data.session.id);
+      setQuestions(data.session.questions);
+      setCurrentIndex(0);
+      setSelectedOptionId(null);
+      setScore(0);
+      setWrongAnswers([]);
+      setWrongCardIds([]);
+      setWrittenWrong([]);
+      setUserAnswer("");
+      setEvaluation(null);
+      setSavedSession(null);
+      setPhase("playing");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.quiz.failedLoad);
+    } finally {
+      setGeneratingQuiz(false);
+    }
   }
 
   function resumeQuiz() {
@@ -148,7 +211,10 @@ export default function QuizPage() {
     setScore(savedSession.score);
     setWrongCardIds(savedSession.wrongCardIds);
     setWrongAnswers(wrongQuestionsFromIds(savedSession.questions, savedSession.wrongCardIds));
+    setQuizMode(savedSession.mode);
     setSelectedOptionId(null);
+    setUserAnswer("");
+    setEvaluation(null);
     setSavedSession(null);
     setPhase("playing");
   }
@@ -177,7 +243,7 @@ export default function QuizPage() {
     }
   }
 
-  async function handleNext() {
+  async function handleNextChoice() {
     const nextScore = score;
     const nextWrongIds = wrongCardIds;
     const isLast = currentIndex + 1 >= questions.length;
@@ -193,6 +259,77 @@ export default function QuizPage() {
     await persistQuizSession(nextIndex, nextScore, nextWrongIds);
     setCurrentIndex(nextIndex);
     setSelectedOptionId(null);
+  }
+
+  async function handleSubmitWritten() {
+    const question = questions[currentIndex];
+    const answer = userAnswer.trim();
+    if (!answer || evaluating || evaluation) return;
+
+    setEvaluating(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/quiz/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: question.prompt,
+          correctAnswer: question.correctAnswer,
+          userAnswer: answer,
+          language: locale,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? t.quiz.failedLoad);
+
+      setEvaluation(data);
+
+      let nextScore = score;
+      const nextWrongIds = [...wrongCardIds];
+
+      if (data.isCorrect) {
+        nextScore += 1;
+      } else {
+        nextWrongIds.push(question.cardId);
+        setWrittenWrong((prev) => [
+          ...prev,
+          {
+            cardId: question.cardId,
+            prompt: question.prompt,
+            correctAnswer: question.correctAnswer,
+            userAnswer: answer,
+            evaluation: data,
+          },
+        ]);
+      }
+
+      setScore(nextScore);
+      setWrongCardIds(nextWrongIds);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.quiz.failedLoad);
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
+  async function handleNextWritten() {
+    const isLast = currentIndex + 1 >= questions.length;
+    const nextScore = score;
+    const nextWrongIds = wrongCardIds;
+
+    if (isLast) {
+      await persistQuizSession(currentIndex, nextScore, nextWrongIds, true);
+      setSessionId(null);
+      setPhase("results");
+      return;
+    }
+
+    const nextIndex = currentIndex + 1;
+    await persistQuizSession(nextIndex, nextScore, nextWrongIds);
+    setCurrentIndex(nextIndex);
+    setUserAnswer("");
+    setEvaluation(null);
   }
 
   async function restartQuiz() {
@@ -211,15 +348,19 @@ export default function QuizPage() {
     setScore(0);
     setWrongAnswers([]);
     setWrongCardIds([]);
+    setWrittenWrong([]);
+    setUserAnswer("");
+    setEvaluation(null);
     await loadDeck();
   }
 
   const currentQuestion = questions[currentIndex];
   const progress =
-    questions.length > 0 ? ((currentIndex + (selectedOptionId ? 1 : 0)) / questions.length) * 100 : 0;
+    questions.length > 0 ? ((currentIndex + (quizMode === "written" && evaluation ? 1 : selectedOptionId ? 1 : 0)) / questions.length) * 100 : 0;
   const countOptions = getQuizQuestionCountOptions(allCards.length);
   const percentScore =
     questions.length > 0 ? Math.round((score / questions.length) * 100) : 0;
+  const canQuiz = canRunMultipleChoiceQuiz(allCards) || canRunWrittenQuiz(allCards);
 
   if (loading) {
     return (
@@ -230,7 +371,7 @@ export default function QuizPage() {
     );
   }
 
-  if (!canRunMultipleChoiceQuiz(allCards)) {
+  if (!canQuiz) {
     return (
       <div>
         <nav className="mb-4 text-sm text-[var(--color-text-muted)]">
@@ -286,7 +427,35 @@ export default function QuizPage() {
           )}
 
           <Card className="mt-8">
-            <p className="text-sm font-medium text-[var(--color-text-primary)]">{t.quiz.questionCount}</p>
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">{t.quiz.modeLabel}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setQuizMode("choice")}
+                className={[
+                  "rounded-lg border px-4 py-2 text-sm font-medium min-h-9",
+                  quizMode === "choice"
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
+                    : "border-[var(--color-border-strong)]",
+                ].join(" ")}
+              >
+                {t.quiz.modeChoice}
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuizMode("written")}
+                className={[
+                  "rounded-lg border px-4 py-2 text-sm font-medium min-h-9",
+                  quizMode === "written"
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
+                    : "border-[var(--color-border-strong)]",
+                ].join(" ")}
+              >
+                {t.quiz.modeWritten}
+              </button>
+            </div>
+
+            <p className="mt-6 text-sm font-medium text-[var(--color-text-primary)]">{t.quiz.questionCount}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {countOptions.map((count) => (
                 <button
@@ -309,18 +478,23 @@ export default function QuizPage() {
               {fmt(t.quiz.cardsAvailable, { count: allCards.length })}
             </p>
             <p className="mt-2 text-xs text-[var(--color-text-muted)]">{t.quiz.sessionSaved}</p>
+            {quizMode === "written" && (
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">{t.quiz.writtenHint}</p>
+            )}
 
             <div className="mt-6 flex gap-2">
               <Link href={`/decks/${deckId}`}>
                 <Button variant="secondary">{t.common.cancel}</Button>
               </Link>
-              <Button onClick={startNewQuiz}>{t.quiz.startQuiz}</Button>
+              <Button onClick={startNewQuiz} loading={generatingQuiz}>
+                {generatingQuiz ? t.quiz.generatingQuiz : t.quiz.startQuiz}
+              </Button>
             </div>
           </Card>
         </>
       )}
 
-      {phase === "playing" && currentQuestion && (
+      {phase === "playing" && currentQuestion && quizMode === "choice" && (
         <>
           <div className="mb-6">
             <ProgressBar
@@ -348,7 +522,7 @@ export default function QuizPage() {
               const isCorrectOption = option.isCorrect;
 
               let optionStyle =
-                "border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface)]";
+                "border-[var(--color-border-strong)] bg-[var(--color-surface-raised)]";
 
               if (showResult) {
                 if (isCorrectOption) {
@@ -359,8 +533,8 @@ export default function QuizPage() {
                   optionStyle = "border-[var(--color-border)] bg-[var(--color-surface)] opacity-60";
                 }
               } else {
-                optionStyle =
-                  "border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-muted)]/40";
+                optionStyle +=
+                  " hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-muted)]/40";
               }
 
               return (
@@ -370,8 +544,7 @@ export default function QuizPage() {
                   disabled={selectedOptionId !== null}
                   onClick={() => handleSelect(option.id, option.isCorrect, currentQuestion)}
                   className={[
-                    "w-full rounded-lg border px-4 py-3 text-left text-sm transition-colors",
-                    "disabled:cursor-default min-h-[44px]",
+                    "w-full rounded-lg border px-4 py-3 text-left text-sm transition-colors min-h-[44px]",
                     optionStyle,
                   ].join(" ")}
                 >
@@ -388,10 +561,70 @@ export default function QuizPage() {
                   ? t.quiz.correct
                   : fmt(t.quiz.correctAnswer, { answer: currentQuestion.correctAnswer })}
               </p>
-              <Button onClick={handleNext}>
+              <Button onClick={handleNextChoice}>
                 {currentIndex + 1 < questions.length ? t.quiz.nextQuestion : t.quiz.seeResults}
               </Button>
             </div>
+          )}
+        </>
+      )}
+
+      {phase === "playing" && currentQuestion && quizMode === "written" && (
+        <>
+          <div className="mb-6">
+            <ProgressBar
+              value={progress}
+              label={fmt(t.quiz.questionOf, { current: currentIndex + 1, total: questions.length })}
+            />
+          </div>
+
+          <Card className="mb-6">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+              {t.study.question}
+            </p>
+            <p className="mt-3 text-xl text-[var(--color-text-primary)] font-[family-name:var(--font-display)]">
+              {currentQuestion.prompt}
+            </p>
+          </Card>
+
+          {!evaluation && (
+            <div>
+              <label htmlFor="written-answer" className="mb-2 block text-sm font-medium">
+                {t.quiz.typeAnswer}
+              </label>
+              <textarea
+                id="written-answer"
+                value={userAnswer}
+                onChange={(e) => setUserAnswer(e.target.value)}
+                rows={4}
+                className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] px-3 py-2 text-sm"
+                disabled={evaluating}
+              />
+              <Button
+                className="mt-4"
+                onClick={handleSubmitWritten}
+                loading={evaluating}
+                disabled={!userAnswer.trim()}
+              >
+                {evaluating ? t.quiz.checkingAnswer : t.quiz.submitAnswer}
+              </Button>
+            </div>
+          )}
+
+          {evaluation && (
+            <Card className="mt-4">
+              <p className="text-lg font-medium text-[var(--color-text-primary)]">
+                {fmt(t.quiz.yourScore, { percent: evaluation.scorePercent })}
+              </p>
+              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{evaluation.feedback}</p>
+              <p className="mt-4 text-xs font-medium uppercase text-[var(--color-text-muted)]">
+                {t.quiz.modelAnswer}
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-text-primary)]">{evaluation.betterAnswer}</p>
+              <Button className="mt-4" onClick={handleNextWritten}>
+                {currentIndex + 1 < questions.length ? t.quiz.nextQuestion : t.quiz.seeResults}
+              </Button>
+            </Card>
           )}
         </>
       )}
@@ -414,7 +647,7 @@ export default function QuizPage() {
             </div>
           </Card>
 
-          {wrongAnswers.length > 0 && (
+          {quizMode === "choice" && wrongAnswers.length > 0 && (
             <div className="mt-8 text-left">
               <h2 className="text-lg text-[var(--color-text-primary)]">{t.quiz.reviewMistakes}</h2>
               <ul className="mt-4 space-y-3" role="list">
@@ -423,6 +656,24 @@ export default function QuizPage() {
                     <Card>
                       <p className="text-sm font-medium">{q.prompt}</p>
                       <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{q.correctAnswer}</p>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {quizMode === "written" && writtenWrong.length > 0 && (
+            <div className="mt-8 text-left">
+              <h2 className="text-lg text-[var(--color-text-primary)]">{t.quiz.reviewMistakes}</h2>
+              <ul className="mt-4 space-y-3" role="list">
+                {writtenWrong.map((w) => (
+                  <li key={w.cardId}>
+                    <Card>
+                      <p className="text-sm font-medium">{w.prompt}</p>
+                      <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Du: {w.userAnswer}</p>
+                      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{w.evaluation.feedback}</p>
+                      <p className="mt-2 text-sm font-medium">{w.evaluation.betterAnswer}</p>
                     </Card>
                   </li>
                 ))}

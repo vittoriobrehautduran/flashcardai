@@ -70,7 +70,22 @@ export function buildQuizQuestions(cards: QuizCard[], questionCount: number): Qu
 }
 
 export function canRunMultipleChoiceQuiz(cards: QuizCard[]): boolean {
-  return cards.length >= 2;
+  return cards.length >= 1;
+}
+
+export function canRunWrittenQuiz(cards: QuizCard[]): boolean {
+  return cards.length >= 1;
+}
+
+export function buildWrittenQuestions(cards: QuizCard[], questionCount: number) {
+  if (cards.length === 0) return [];
+  const selected = shuffle(cards).slice(0, Math.min(questionCount, cards.length));
+  return selected.map((card) => ({
+    cardId: card.id,
+    prompt: card.front,
+    correctAnswer: card.back,
+    options: [],
+  }));
 }
 
 export function getQuizQuestionCountOptions(cardCount: number): number[] {

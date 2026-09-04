@@ -63,6 +63,7 @@ function createDatabase() {
       current_index INTEGER NOT NULL DEFAULT 0,
       score INTEGER NOT NULL DEFAULT 0,
       wrong_card_ids_json TEXT NOT NULL DEFAULT '[]',
+      mode TEXT NOT NULL DEFAULT 'choice',
       started_at INTEGER NOT NULL,
       completed_at INTEGER
     );
@@ -71,6 +72,11 @@ function createDatabase() {
   // Migrations for existing databases
   try {
     sqlite.exec(`ALTER TABLE quiz_sessions ADD COLUMN wrong_card_ids_json TEXT NOT NULL DEFAULT '[]'`);
+  } catch {
+    // column already exists
+  }
+  try {
+    sqlite.exec(`ALTER TABLE quiz_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'choice'`);
   } catch {
     // column already exists
   }

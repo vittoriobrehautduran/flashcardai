@@ -202,7 +202,8 @@ export function abandonStudySession(sessionId: string) {
 export function startQuizSession(
   deckId: string,
   questions: QuizQuestion[],
-  questionCount: number
+  questionCount: number,
+  mode: "choice" | "written" = "choice"
 ) {
   const db = getDb();
   const now = new Date();
@@ -220,14 +221,15 @@ export function startQuizSession(
     currentIndex: 0,
     score: 0,
     wrongCardIdsJson: "[]",
+    mode,
     startedAt: now,
     completedAt: null,
   }).run();
 
-  return { id, questions, currentIndex: 0, score: 0, wrongCardIds: [] as string[] };
+  return { id, questions, currentIndex: 0, score: 0, wrongCardIds: [] as string[], mode };
 }
 
-export function getActiveQuizSession(deckId: string) {
+export function getActiveQuizSession(deckId: string, mode?: "choice" | "written") {
   const db = getDb();
   const row = db
     .select()
@@ -236,6 +238,7 @@ export function getActiveQuizSession(deckId: string) {
     .get();
 
   if (!row) return null;
+  if (mode && row.mode !== mode) return null;
 
   const questions = deserializeQuizQuestions(
     JSON.parse(row.questionsJson) as SerializedQuizQuestion[]
@@ -249,6 +252,7 @@ export function getActiveQuizSession(deckId: string) {
     currentIndex: row.currentIndex,
     score: row.score,
     wrongCardIds,
+    mode: row.mode as "choice" | "written",
   };
 }
 
