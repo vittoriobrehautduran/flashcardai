@@ -16,6 +16,12 @@ const en = {
     decks: "Decks",
     appName: "FlashcardAI",
   },
+  auth: {
+    signIn: "Sign in",
+    signOut: "Sign out",
+    loginTitle: "Welcome to FlashcardAI",
+    loginSubtitle: "Sign in to access your decks and keep your study progress.",
+  },
   common: {
     back: "Back",
     cancel: "Cancel",
@@ -208,6 +214,12 @@ const sv: typeof en = {
   nav: {
     decks: "Kortlekar",
     appName: "FlashcardAI",
+  },
+  auth: {
+    signIn: "Logga in",
+    signOut: "Logga ut",
+    loginTitle: "Välkommen till FlashcardAI",
+    loginSubtitle: "Logga in för att komma åt dina kortlekar och behålla dina studieframsteg.",
   },
   common: {
     back: "Tillbaka",
