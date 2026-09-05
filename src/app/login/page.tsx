@@ -16,6 +16,13 @@ function LoginContent() {
   const nextParam = searchParams.get("next");
   const nextPath = nextParam && nextParam.startsWith("/") ? nextParam : "/";
   const loginHref = `/api/auth/login?next=${encodeURIComponent(nextPath)}`;
+  const showConfigHelp = searchParams.get("error") === "config";
+
+  // Shown when Cognito env vars look wrong, or as a reminder after a redirect mismatch.
+  const callbackUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/api/auth/callback` : "";
+  const logoutUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/login` : "";
 
   return (
     <div className="login-screen relative flex min-h-screen flex-col overflow-hidden">
@@ -44,6 +51,18 @@ function LoginContent() {
         </p>
 
         <div className="login-fade login-fade-delay-4 mt-10 flex flex-col items-center gap-4">
+          {showConfigHelp && callbackUrl && (
+            <div className="max-w-md rounded-xl border border-[var(--color-danger)]/30 bg-[var(--color-danger-muted)]/40 px-4 py-3 text-left text-sm text-[var(--color-text-primary)]">
+              <p className="mb-2">{t.auth.configError}</p>
+              <code className="block break-all rounded bg-[var(--color-surface)] px-2 py-1 text-xs">
+                {callbackUrl}
+              </code>
+              <p className="mb-2 mt-3">{t.auth.configErrorSignOut}</p>
+              <code className="block break-all rounded bg-[var(--color-surface)] px-2 py-1 text-xs">
+                {logoutUrl}
+              </code>
+            </div>
+          )}
           <a
             href={loginHref}
             className="login-cta inline-flex min-h-12 min-w-[12rem] items-center justify-center rounded-xl bg-[var(--color-accent)] px-8 text-base font-medium text-white no-underline shadow-[0_12px_32px_-12px_rgba(45,106,79,0.55)] transition-[transform,background-color,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:bg-[var(--color-accent-hover)] hover:shadow-[0_16px_40px_-12px_rgba(45,106,79,0.6)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] active:translate-y-0"
