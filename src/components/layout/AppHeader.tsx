@@ -4,7 +4,12 @@ import Link from "next/link";
 import { LanguageToggle } from "@/components/layout/LanguageToggle";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
-export function AppHeader() {
+interface AppHeaderProps {
+  // Whether a signed-in session exists; decided server-side in the layout.
+  signedIn?: boolean;
+}
+
+export function AppHeader({ signedIn = false }: AppHeaderProps) {
   const { t } = useLocale();
 
   return (
@@ -25,6 +30,14 @@ export function AppHeader() {
             {t.nav.decks}
           </Link>
           <LanguageToggle />
+          {signedIn && (
+            <a
+              href="/api/auth/logout"
+              className="rounded-lg px-3 py-2 text-sm text-[var(--color-text-secondary)] no-underline transition-colors hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]"
+            >
+              {t.auth.signOut}
+            </a>
+          )}
         </nav>
       </div>
     </header>
