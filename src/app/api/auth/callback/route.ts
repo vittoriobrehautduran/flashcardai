@@ -2,7 +2,7 @@
 // Exchanges the one-time code for tokens and stores them in cookies.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAppUrl, isAuthConfigured } from "@/lib/auth/cognito-config";
+import { getAppUrl, getAuthCallbackUrl, isAuthConfigured } from "@/lib/auth/cognito-config";
 import { exchangeCodeForTokens } from "@/lib/auth/cognito-tokens";
 import {
   AUTH_STATE_COOKIE,
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login`);
   }
 
-  const tokens = await exchangeCodeForTokens(code, `${appUrl}/api/auth/callback`);
+  const tokens = await exchangeCodeForTokens(code, getAuthCallbackUrl(request.url));
   if (!tokens) {
     return NextResponse.redirect(`${appUrl}/login`);
   }

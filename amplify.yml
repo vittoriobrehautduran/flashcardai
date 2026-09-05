@@ -11,7 +11,7 @@ frontend:
         # SSR server that handles requests. Write the ones the server needs
         # into .env.production so Next.js loads them at runtime.
         # (|| true keeps the build alive if a var group isn't set yet.)
-        - env | grep -e NEON_CONNECTION_STRING -e COGNITO_ -e APP_URL -e GEMINI_ >> .env.production || true
+        - env | grep -e NEON_CONNECTION_STRING -e COGNITO_ -e GEMINI_ >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next

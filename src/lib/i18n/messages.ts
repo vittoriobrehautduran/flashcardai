@@ -24,6 +24,10 @@ const en = {
     loginSubtitle:
       "Sign in to open your decks, spaced repetition, and quizzes — progress stays with you.",
     loginHint: "You’ll continue securely with email and password.",
+    configError:
+      "Login is misconfigured. In Cognito, add this exact callback URL under your app client → Allowed callback URLs:",
+    configErrorSignOut:
+      "Also add this sign-out URL under Allowed sign-out URLs:",
   },
   common: {
     back: "Back",
@@ -226,6 +230,10 @@ const sv: typeof en = {
     loginSubtitle:
       "Logga in för att öppna dina kortlekar, spaced repetition och quiz — dina framsteg följer med dig.",
     loginHint: "Du fortsätter säkert med e-post och lösenord.",
+    configError:
+      "Inloggningen är felkonfigurerad. Lägg till denna exakta callback-URL i Cognito under app client → Allowed callback URLs:",
+    configErrorSignOut:
+      "Lägg också till denna sign-out-URL under Allowed sign-out URLs:",
   },
   common: {
     back: "Tillbaka",
