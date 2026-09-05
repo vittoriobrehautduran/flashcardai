@@ -1,6 +1,6 @@
 // Central place for the AWS Cognito settings used by the login flow.
 // Everything comes from environment variables so the same code works
-// locally and on Netlify without changes.
+// locally and on Amplify without changes.
 
 export interface CognitoConfig {
   userPoolId: string;
@@ -44,7 +44,7 @@ export function getCognitoConfig(): CognitoConfig {
   };
 }
 
-// Base URL of the deployed site (e.g. "https://flashcardai.netlify.app").
+// Base URL of the deployed site (e.g. "https://main.xxxxx.amplifyapp.com").
 // Falls back to the origin of the current request so local dev keeps working.
 export function getAppUrl(requestUrl: string): string {
   const configured = process.env.APP_URL;

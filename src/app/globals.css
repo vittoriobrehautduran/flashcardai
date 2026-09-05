@@ -48,3 +48,99 @@
     outline-offset: 2px;
   }
 }
+
+/* Login page: atmosphere, entrance motion, decorative cards */
+@layer components {
+  .login-atmosphere {
+    background:
+      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(45, 106, 79, 0.14), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 100% 80%, rgba(45, 106, 79, 0.08), transparent 50%),
+      radial-gradient(ellipse 40% 35% at 0% 70%, rgba(181, 71, 8, 0.05), transparent 45%),
+      linear-gradient(180deg, #f7f4ef 0%, var(--color-surface) 45%, #f3f0ea 100%);
+  }
+
+  .login-grid {
+    opacity: 0.35;
+    background-image:
+      linear-gradient(rgba(26, 24, 22, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(26, 24, 22, 0.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 75%);
+  }
+
+  .login-fade {
+    animation: login-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .login-fade-delay-1 {
+    animation-delay: 60ms;
+  }
+
+  .login-fade-delay-2 {
+    animation-delay: 140ms;
+  }
+
+  .login-fade-delay-3 {
+    animation-delay: 220ms;
+  }
+
+  .login-fade-delay-4 {
+    animation-delay: 320ms;
+  }
+
+  .login-card {
+    animation: login-card-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .login-card-left {
+    animation-name: login-card-in-left;
+    animation-delay: 420ms;
+  }
+
+  .login-card-right {
+    animation-name: login-card-in-right;
+    animation-delay: 520ms;
+  }
+}
+
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes login-card-in-left {
+  from {
+    opacity: 0;
+    transform: translateY(28px) rotate(-6deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-6deg);
+  }
+}
+
+@keyframes login-card-in-right {
+  from {
+    opacity: 0;
+    transform: translateY(28px) rotate(5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(5deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-fade,
+  .login-card,
+  .login-cta {
+    animation: none !important;
+    transition: none !important;
+  }
+}

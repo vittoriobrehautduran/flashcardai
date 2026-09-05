@@ -37,49 +37,46 @@ export interface DeckProgress {
   } | null;
 }
 
-export function getDeckProgress(deckId: string): DeckProgress {
+export async function getDeckProgress(deckId: string): Promise<DeckProgress> {
   const db = getDb();
   const now = new Date();
 
-  const stats = db
+  const [stats] = await db
     .select({
       total: count(),
-      due: sql<number>`sum(case when ${cardScheduling.due} <= ${now.getTime()} then 1 else 0 end)`,
+      due: sql<number>`sum(case when ${cardScheduling.due} <= ${now} then 1 else 0 end)`,
       newCards: sql<number>`sum(case when ${cardScheduling.reps} = 0 then 1 else 0 end)`,
       studied: sql<number>`sum(case when ${cardScheduling.reps} > 0 then 1 else 0 end)`,
     })
     .from(cards)
     .leftJoin(cardScheduling, eq(cards.id, cardScheduling.cardId))
-    .where(eq(cards.deckId, deckId))
-    .get();
+    .where(eq(cards.deckId, deckId));
 
-  const lastStudy = db
+  const [lastStudy] = await db
     .select()
     .from(studySessions)
     .where(and(eq(studySessions.deckId, deckId), eq(studySessions.status, "completed")))
     .orderBy(desc(studySessions.completedAt))
-    .limit(1)
-    .get();
+    .limit(1);
 
-  const lastQuiz = db
+  const [lastQuiz] = await db
     .select()
     .from(quizSessions)
     .where(and(eq(quizSessions.deckId, deckId), eq(quizSessions.status, "completed")))
     .orderBy(desc(quizSessions.completedAt))
-    .limit(1)
-    .get();
+    .limit(1);
 
-  const activeStudy = db
+  const [activeStudy] = await db
     .select()
     .from(studySessions)
     .where(and(eq(studySessions.deckId, deckId), eq(studySessions.status, "active")))
-    .get();
+    .limit(1);
 
-  const activeQuiz = db
+  const [activeQuiz] = await db
     .select()
     .from(quizSessions)
     .where(and(eq(quizSessions.deckId, deckId), eq(quizSessions.status, "active")))
-    .get();
+    .limit(1);
 
   let activeStudySession: DeckProgress["activeStudySession"] = null;
   if (activeStudy) {
@@ -121,29 +118,29 @@ export function getDeckProgress(deckId: string): DeckProgress {
   };
 }
 
-function abandonActiveStudySessions(deckId: string) {
+async function abandonActiveStudySessions(deckId: string) {
   const db = getDb();
-  db.update(studySessions)
+  await db
+    .update(studySessions)
     .set({ status: "completed", completedAt: new Date() })
-    .where(and(eq(studySessions.deckId, deckId), eq(studySessions.status, "active")))
-    .run();
+    .where(and(eq(studySessions.deckId, deckId), eq(studySessions.status, "active")));
 }
 
-function abandonActiveQuizSessions(deckId: string) {
+async function abandonActiveQuizSessions(deckId: string) {
   const db = getDb();
-  db.update(quizSessions)
+  await db
+    .update(quizSessions)
     .set({ status: "completed", completedAt: new Date() })
-    .where(and(eq(quizSessions.deckId, deckId), eq(quizSessions.status, "active")))
-    .run();
+    .where(and(eq(quizSessions.deckId, deckId), eq(quizSessions.status, "active")));
 }
 
-export function startStudySession(deckId: string, cardIds: string[]) {
+export async function startStudySession(deckId: string, cardIds: string[]) {
   const db = getDb();
   const now = new Date();
-  abandonActiveStudySessions(deckId);
+  await abandonActiveStudySessions(deckId);
 
   const id = uuid();
-  db.insert(studySessions).values({
+  await db.insert(studySessions).values({
     id,
     deckId,
     status: "active",
@@ -152,18 +149,18 @@ export function startStudySession(deckId: string, cardIds: string[]) {
     reviewedCount: 0,
     startedAt: now,
     completedAt: null,
-  }).run();
+  });
 
   return { id, cardIds, currentIndex: 0, reviewedCount: 0 };
 }
 
-export function getActiveStudySession(deckId: string) {
+export async function getActiveStudySession(deckId: string) {
   const db = getDb();
-  const row = db
+  const [row] = await db
     .select()
     .from(studySessions)
     .where(and(eq(studySessions.deckId, deckId), eq(studySessions.status, "active")))
-    .get();
+    .limit(1);
 
   if (!row) return null;
 
@@ -175,31 +172,31 @@ export function getActiveStudySession(deckId: string) {
   };
 }
 
-export function updateStudySession(
+export async function updateStudySession(
   sessionId: string,
   currentIndex: number,
   reviewedCount: number
 ) {
   const db = getDb();
-  db.update(studySessions)
+  await db
+    .update(studySessions)
     .set({ currentIndex, reviewedCount })
-    .where(eq(studySessions.id, sessionId))
-    .run();
+    .where(eq(studySessions.id, sessionId));
 }
 
-export function completeStudySession(sessionId: string) {
+export async function completeStudySession(sessionId: string) {
   const db = getDb();
-  db.update(studySessions)
+  await db
+    .update(studySessions)
     .set({ status: "completed", completedAt: new Date() })
-    .where(eq(studySessions.id, sessionId))
-    .run();
+    .where(eq(studySessions.id, sessionId));
 }
 
-export function abandonStudySession(sessionId: string) {
-  completeStudySession(sessionId);
+export async function abandonStudySession(sessionId: string) {
+  await completeStudySession(sessionId);
 }
 
-export function startQuizSession(
+export async function startQuizSession(
   deckId: string,
   questions: QuizQuestion[],
   questionCount: number,
@@ -207,12 +204,12 @@ export function startQuizSession(
 ) {
   const db = getDb();
   const now = new Date();
-  abandonActiveQuizSessions(deckId);
+  await abandonActiveQuizSessions(deckId);
 
   const id = uuid();
   const serialized = serializeQuizQuestions(questions);
 
-  db.insert(quizSessions).values({
+  await db.insert(quizSessions).values({
     id,
     deckId,
     status: "active",
@@ -224,18 +221,18 @@ export function startQuizSession(
     mode,
     startedAt: now,
     completedAt: null,
-  }).run();
+  });
 
   return { id, questions, currentIndex: 0, score: 0, wrongCardIds: [] as string[], mode };
 }
 
-export function getActiveQuizSession(deckId: string, mode?: "choice" | "written") {
+export async function getActiveQuizSession(deckId: string, mode?: "choice" | "written") {
   const db = getDb();
-  const row = db
+  const [row] = await db
     .select()
     .from(quizSessions)
     .where(and(eq(quizSessions.deckId, deckId), eq(quizSessions.status, "active")))
-    .get();
+    .limit(1);
 
   if (!row) return null;
   if (mode && row.mode !== mode) return null;
@@ -256,7 +253,7 @@ export function getActiveQuizSession(deckId: string, mode?: "choice" | "written"
   };
 }
 
-export function updateQuizSession(
+export async function updateQuizSession(
   sessionId: string,
   currentIndex: number,
   score: number,
@@ -273,33 +270,30 @@ export function updateQuizSession(
     updates.wrongCardIdsJson = JSON.stringify(wrongCardIds);
   }
 
-  db.update(quizSessions)
-    .set(updates)
-    .where(eq(quizSessions.id, sessionId))
-    .run();
+  await db.update(quizSessions).set(updates).where(eq(quizSessions.id, sessionId));
 }
 
-export function completeQuizSession(sessionId: string, score: number) {
+export async function completeQuizSession(sessionId: string, score: number) {
   const db = getDb();
-  db.update(quizSessions)
+  await db
+    .update(quizSessions)
     .set({ status: "completed", completedAt: new Date(), score })
-    .where(eq(quizSessions.id, sessionId))
-    .run();
+    .where(eq(quizSessions.id, sessionId));
 }
 
-export function abandonQuizSession(sessionId: string) {
+export async function abandonQuizSession(sessionId: string) {
   const db = getDb();
-  db.update(quizSessions)
+  await db
+    .update(quizSessions)
     .set({ status: "completed", completedAt: new Date() })
-    .where(eq(quizSessions.id, sessionId))
-    .run();
+    .where(eq(quizSessions.id, sessionId));
 }
 
-export function getCardsByIds(cardIds: string[]) {
+export async function getCardsByIds(cardIds: string[]) {
   const db = getDb();
   if (cardIds.length === 0) return [];
 
-  const rows = db.select().from(cards).where(inArray(cards.id, cardIds)).all();
+  const rows = await db.select().from(cards).where(inArray(cards.id, cardIds));
   const map = new Map(rows.map((c) => [c.id, c]));
 
   return cardIds

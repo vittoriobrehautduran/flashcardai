@@ -6,7 +6,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deck = getDeck(id);
+  const deck = await getDeck(id);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -15,7 +15,7 @@ export async function POST(
   const body = await request.json();
 
   if (Array.isArray(body.cards)) {
-    const created = createCardsBatch(
+    const created = await createCardsBatch(
       id,
       body.cards.map((c: { front: string; back: string; sourceSection?: string }) => ({
         front: c.front,
@@ -33,6 +33,6 @@ export async function POST(
     return NextResponse.json({ error: "Front and back are required" }, { status: 400 });
   }
 
-  const card = createCard(id, front, back, body.sourceSection?.trim());
+  const card = await createCard(id, front, back, body.sourceSection?.trim());
   return NextResponse.json(card, { status: 201 });
 }

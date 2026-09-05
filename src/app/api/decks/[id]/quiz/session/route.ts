@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deck = getDeck(id);
+  const deck = await getDeck(id);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -24,7 +24,7 @@ export async function GET(
   const mode =
     modeParam === "written" ? "written" : modeParam === "choice" ? "choice" : undefined;
 
-  const active = getActiveQuizSession(id, mode);
+  const active = await getActiveQuizSession(id, mode);
   if (!active) {
     return NextResponse.json({ session: null });
   }
@@ -47,7 +47,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: deckId } = await params;
-  const deck = getDeck(deckId);
+  const deck = await getDeck(deckId);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -62,7 +62,12 @@ export async function POST(
     return NextResponse.json({ error: "questions are required" }, { status: 400 });
   }
 
-  const session = startQuizSession(deckId, questions, questionCount ?? questions.length, mode);
+  const session = await startQuizSession(
+    deckId,
+    questions,
+    questionCount ?? questions.length,
+    mode
+  );
 
   return NextResponse.json({
     session: {
@@ -82,7 +87,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: deckId } = await params;
-  const deck = getDeck(deckId);
+  const deck = await getDeck(deckId);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -96,16 +101,19 @@ export async function PATCH(
   const wrongCardIds = body.wrongCardIds as string[] | undefined;
 
   if (!sessionId || currentIndex === undefined || score === undefined) {
-    return NextResponse.json({ error: "sessionId, currentIndex, score required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "sessionId, currentIndex, score required" },
+      { status: 400 }
+    );
   }
 
   if (complete) {
-    completeQuizSession(sessionId, score);
+    await completeQuizSession(sessionId, score);
     if (wrongCardIds) {
-      updateQuizSession(sessionId, currentIndex, score, wrongCardIds);
+      await updateQuizSession(sessionId, currentIndex, score, wrongCardIds);
     }
   } else {
-    updateQuizSession(sessionId, currentIndex, score, wrongCardIds);
+    await updateQuizSession(sessionId, currentIndex, score, wrongCardIds);
   }
 
   return NextResponse.json({ ok: true });
@@ -116,7 +124,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: deckId } = await params;
-  const deck = getDeck(deckId);
+  const deck = await getDeck(deckId);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -126,10 +134,10 @@ export async function DELETE(
   const sessionId = body.sessionId as string | undefined;
 
   if (sessionId) {
-    abandonQuizSession(sessionId);
+    await abandonQuizSession(sessionId);
   } else {
-    const active = getActiveQuizSession(deckId);
-    if (active) abandonQuizSession(active.id);
+    const active = await getActiveQuizSession(deckId);
+    if (active) await abandonQuizSession(active.id);
   }
 
   return NextResponse.json({ ok: true });

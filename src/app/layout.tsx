@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Instrument_Serif } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { AppShell } from "@/components/layout/AppShell";
 import { LocaleProvider } from "@/components/providers/LocaleProvider";
 import { isAuthConfigured } from "@/lib/auth/cognito-config";
 import { ID_TOKEN_COOKIE } from "@/lib/auth/session";
@@ -38,8 +38,7 @@ export default async function RootLayout({
     <html lang="sv" className={`${dmSans.variable} ${instrumentSerif.variable}`}>
       <body className="min-h-screen antialiased">
         <LocaleProvider>
-          <AppHeader signedIn={signedIn} />
-          <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{children}</main>
+          <AppShell signedIn={signedIn}>{children}</AppShell>
         </LocaleProvider>
       </body>
     </html>

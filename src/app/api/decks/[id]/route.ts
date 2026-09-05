@@ -6,13 +6,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deck = getDeck(id);
+  const deck = await getDeck(id);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  const cards = listCards(id);
+  const cards = await listCards(id);
   return NextResponse.json({ deck, cards });
 }
 
@@ -28,7 +28,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const deck = updateDeck(id, name, body.description?.trim());
+  const deck = await updateDeck(id, name, body.description?.trim());
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
@@ -41,12 +41,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deck = getDeck(id);
+  const deck = await getDeck(id);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  deleteDeck(id);
+  await deleteDeck(id);
   return NextResponse.json({ ok: true });
 }

@@ -1,14 +1,20 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import {
+  pgTable,
+  text,
+  integer,
+  doublePrecision,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
-export const decks = sqliteTable("decks", {
+export const decks = pgTable("decks", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
 
-export const cards = sqliteTable("cards", {
+export const cards = pgTable("cards", {
   id: text("id").primaryKey(),
   deckId: text("deck_id")
     .notNull()
@@ -16,26 +22,26 @@ export const cards = sqliteTable("cards", {
   front: text("front").notNull(),
   back: text("back").notNull(),
   sourceSection: text("source_section"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 });
 
 // FSRS scheduling state per card
-export const cardScheduling = sqliteTable("card_scheduling", {
+export const cardScheduling = pgTable("card_scheduling", {
   cardId: text("card_id")
     .primaryKey()
     .references(() => cards.id, { onDelete: "cascade" }),
-  due: integer("due", { mode: "timestamp" }).notNull(),
-  stability: real("stability").notNull(),
-  difficulty: real("difficulty").notNull(),
+  due: timestamp("due", { withTimezone: true }).notNull(),
+  stability: doublePrecision("stability").notNull(),
+  difficulty: doublePrecision("difficulty").notNull(),
   elapsedDays: integer("elapsed_days").notNull().default(0),
   scheduledDays: integer("scheduled_days").notNull().default(0),
   reps: integer("reps").notNull().default(0),
   lapses: integer("lapses").notNull().default(0),
   state: integer("state").notNull().default(0),
-  lastReview: integer("last_review", { mode: "timestamp" }),
+  lastReview: timestamp("last_review", { withTimezone: true }),
 });
 
-export const studySessions = sqliteTable("study_sessions", {
+export const studySessions = pgTable("study_sessions", {
   id: text("id").primaryKey(),
   deckId: text("deck_id")
     .notNull()
@@ -44,11 +50,11 @@ export const studySessions = sqliteTable("study_sessions", {
   cardIdsJson: text("card_ids_json").notNull(),
   currentIndex: integer("current_index").notNull().default(0),
   reviewedCount: integer("reviewed_count").notNull().default(0),
-  startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
-export const quizSessions = sqliteTable("quiz_sessions", {
+export const quizSessions = pgTable("quiz_sessions", {
   id: text("id").primaryKey(),
   deckId: text("deck_id")
     .notNull()
@@ -60,8 +66,8 @@ export const quizSessions = sqliteTable("quiz_sessions", {
   score: integer("score").notNull().default(0),
   wrongCardIdsJson: text("wrong_card_ids_json").notNull().default("[]"),
   mode: text("mode").notNull().default("choice"),
-  startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
 export type Deck = typeof decks.$inferSelect;

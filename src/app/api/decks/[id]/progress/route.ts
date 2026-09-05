@@ -7,11 +7,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deck = getDeck(id);
+  const deck = await getDeck(id);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  return NextResponse.json(getDeckProgress(id));
+  return NextResponse.json(await getDeckProgress(id));
 }

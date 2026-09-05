@@ -16,39 +16,42 @@ export interface DeckWithStats extends Deck {
   newCount: number;
 }
 
-export function listDecks(): DeckWithStats[] {
+export async function listDecks(): Promise<DeckWithStats[]> {
   const db = getDb();
   const now = new Date();
 
-  const allDecks = db.select().from(decks).orderBy(desc(decks.updatedAt)).all();
+  const allDecks = await db.select().from(decks).orderBy(desc(decks.updatedAt));
 
-  return allDecks.map((deck) => {
-    const stats = db
+  const result: DeckWithStats[] = [];
+  for (const deck of allDecks) {
+    const [stats] = await db
       .select({
         total: count(),
-        due: sql<number>`sum(case when ${cardScheduling.due} <= ${now.getTime()} then 1 else 0 end)`,
+        due: sql<number>`sum(case when ${cardScheduling.due} <= ${now} then 1 else 0 end)`,
         newCards: sql<number>`sum(case when ${cardScheduling.reps} = 0 then 1 else 0 end)`,
       })
       .from(cards)
       .leftJoin(cardScheduling, eq(cards.id, cardScheduling.cardId))
-      .where(eq(cards.deckId, deck.id))
-      .get();
+      .where(eq(cards.deckId, deck.id));
 
-    return {
+    result.push({
       ...deck,
       cardCount: stats?.total ?? 0,
       dueCount: Number(stats?.due ?? 0),
       newCount: Number(stats?.newCards ?? 0),
-    };
-  });
+    });
+  }
+
+  return result;
 }
 
-export function getDeck(id: string): Deck | undefined {
+export async function getDeck(id: string): Promise<Deck | undefined> {
   const db = getDb();
-  return db.select().from(decks).where(eq(decks.id, id)).get();
+  const [deck] = await db.select().from(decks).where(eq(decks.id, id)).limit(1);
+  return deck;
 }
 
-export function createDeck(name: string, description?: string): Deck {
+export async function createDeck(name: string, description?: string): Promise<Deck> {
   const db = getDb();
   const now = new Date();
   const deck: Deck = {
@@ -58,36 +61,40 @@ export function createDeck(name: string, description?: string): Deck {
     createdAt: now,
     updatedAt: now,
   };
-  db.insert(decks).values(deck).run();
+  await db.insert(decks).values(deck);
   return deck;
 }
 
-export function updateDeck(id: string, name: string, description?: string): Deck | undefined {
+export async function updateDeck(
+  id: string,
+  name: string,
+  description?: string
+): Promise<Deck | undefined> {
   const db = getDb();
   const now = new Date();
-  db.update(decks)
+  await db
+    .update(decks)
     .set({ name, description: description ?? null, updatedAt: now })
-    .where(eq(decks.id, id))
-    .run();
+    .where(eq(decks.id, id));
   return getDeck(id);
 }
 
-export function deleteDeck(id: string): void {
+export async function deleteDeck(id: string): Promise<void> {
   const db = getDb();
-  db.delete(decks).where(eq(decks.id, id)).run();
+  await db.delete(decks).where(eq(decks.id, id));
 }
 
-export function listCards(deckId: string): Card[] {
+export async function listCards(deckId: string): Promise<Card[]> {
   const db = getDb();
-  return db.select().from(cards).where(eq(cards.deckId, deckId)).orderBy(cards.createdAt).all();
+  return db.select().from(cards).where(eq(cards.deckId, deckId)).orderBy(cards.createdAt);
 }
 
-export function createCard(
+export async function createCard(
   deckId: string,
   front: string,
   back: string,
   sourceSection?: string
-): Card {
+): Promise<Card> {
   const db = getDb();
   const now = new Date();
   const card: Card = {
@@ -99,10 +106,10 @@ export function createCard(
     createdAt: now,
   };
 
-  db.insert(cards).values(card).run();
+  await db.insert(cards).values(card);
 
   const fsrsCard = newFsrsCard(now);
-  db.insert(cardScheduling).values({
+  await db.insert(cardScheduling).values({
     cardId: card.id,
     due: fsrsCard.due,
     stability: fsrsCard.stability,
@@ -113,25 +120,27 @@ export function createCard(
     lapses: fsrsCard.lapses,
     state: fsrsCard.state,
     lastReview: null,
-  }).run();
+  });
 
-  db.update(decks).set({ updatedAt: now }).where(eq(decks.id, deckId)).run();
+  await db.update(decks).set({ updatedAt: now }).where(eq(decks.id, deckId));
 
   return card;
 }
 
-export function createCardsBatch(
+export async function createCardsBatch(
   deckId: string,
   items: Array<{ front: string; back: string; sourceSection?: string }>
-): Card[] {
-  return items.map((item) =>
-    createCard(deckId, item.front, item.back, item.sourceSection)
-  );
+): Promise<Card[]> {
+  const created: Card[] = [];
+  for (const item of items) {
+    created.push(await createCard(deckId, item.front, item.back, item.sourceSection));
+  }
+  return created;
 }
 
-export function deleteCard(cardId: string): void {
+export async function deleteCard(cardId: string): Promise<void> {
   const db = getDb();
-  db.delete(cards).where(eq(cards.id, cardId)).run();
+  await db.delete(cards).where(eq(cards.id, cardId));
 }
 
 export interface StudyCard {
@@ -151,11 +160,11 @@ export interface StudyCard {
   };
 }
 
-export function getDueCards(deckId: string, limit = 50): StudyCard[] {
+export async function getDueCards(deckId: string, limit = 50): Promise<StudyCard[]> {
   const db = getDb();
   const now = new Date();
 
-  const rows = db
+  const rows = await db
     .select({
       id: cards.id,
       front: cards.front,
@@ -173,8 +182,7 @@ export function getDueCards(deckId: string, limit = 50): StudyCard[] {
     .from(cards)
     .innerJoin(cardScheduling, eq(cards.id, cardScheduling.cardId))
     .where(and(eq(cards.deckId, deckId), lte(cardScheduling.due, now)))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   return rows.map((row) => ({
     id: row.id,
@@ -194,15 +202,15 @@ export function getDueCards(deckId: string, limit = 50): StudyCard[] {
   }));
 }
 
-export function submitReview(cardId: string, rating: Grade): void {
+export async function submitReview(cardId: string, rating: Grade): Promise<void> {
   const db = getDb();
   const now = new Date();
 
-  const row = db
+  const [row] = await db
     .select()
     .from(cardScheduling)
     .where(eq(cardScheduling.cardId, cardId))
-    .get();
+    .limit(1);
 
   if (!row) return;
 
@@ -221,7 +229,8 @@ export function submitReview(cardId: string, rating: Grade): void {
   const result = reviewCard(fsrsCard, rating, now);
   const updated = schedulingFromFsrsCard(result.card);
 
-  db.update(cardScheduling)
+  await db
+    .update(cardScheduling)
     .set({
       due: updated.due,
       stability: updated.stability,
@@ -233,6 +242,5 @@ export function submitReview(cardId: string, rating: Grade): void {
       state: updated.state,
       lastReview: updated.lastReview,
     })
-    .where(eq(cardScheduling.cardId, cardId))
-    .run();
+    .where(eq(cardScheduling.cardId, cardId));
 }

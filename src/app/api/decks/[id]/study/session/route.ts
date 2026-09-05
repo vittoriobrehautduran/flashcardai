@@ -13,15 +13,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deck = getDeck(id);
+  const deck = await getDeck(id);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  const active = getActiveStudySession(id);
+  const active = await getActiveStudySession(id);
   if (active) {
-    const cards = getCardsByIds(active.cardIds);
+    const cards = await getCardsByIds(active.cardIds);
     return NextResponse.json({
       cards,
       session: {
@@ -32,7 +32,7 @@ export async function GET(
     });
   }
 
-  const dueCards = getDueCards(id);
+  const dueCards = await getDueCards(id);
   return NextResponse.json({ cards: dueCards, session: null });
 }
 
@@ -41,7 +41,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: deckId } = await params;
-  const deck = getDeck(deckId);
+  const deck = await getDeck(deckId);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -54,8 +54,8 @@ export async function POST(
     return NextResponse.json({ error: "cardIds are required" }, { status: 400 });
   }
 
-  const session = startStudySession(deckId, cardIds);
-  const cards = getCardsByIds(session.cardIds);
+  const session = await startStudySession(deckId, cardIds);
+  const cards = await getCardsByIds(session.cardIds);
 
   return NextResponse.json({
     session: {
@@ -72,7 +72,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: deckId } = await params;
-  const deck = getDeck(deckId);
+  const deck = await getDeck(deckId);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -84,10 +84,13 @@ export async function PATCH(
   const reviewedCount = body.reviewedCount as number | undefined;
 
   if (!sessionId || currentIndex === undefined || reviewedCount === undefined) {
-    return NextResponse.json({ error: "sessionId, currentIndex, reviewedCount required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "sessionId, currentIndex, reviewedCount required" },
+      { status: 400 }
+    );
   }
 
-  updateStudySession(sessionId, currentIndex, reviewedCount);
+  await updateStudySession(sessionId, currentIndex, reviewedCount);
   return NextResponse.json({ ok: true });
 }
 
@@ -96,7 +99,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: deckId } = await params;
-  const deck = getDeck(deckId);
+  const deck = await getDeck(deckId);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
@@ -106,10 +109,10 @@ export async function DELETE(
   const sessionId = body.sessionId as string | undefined;
 
   if (sessionId) {
-    abandonStudySession(sessionId);
+    await abandonStudySession(sessionId);
   } else {
-    const active = getActiveStudySession(deckId);
-    if (active) abandonStudySession(active.id);
+    const active = await getActiveStudySession(deckId);
+    if (active) await abandonStudySession(active.id);
   }
 
   return NextResponse.json({ ok: true });

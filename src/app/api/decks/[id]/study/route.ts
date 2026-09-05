@@ -8,13 +8,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deck = getDeck(id);
+  const deck = await getDeck(id);
 
   if (!deck) {
     return NextResponse.json({ error: "Deck not found" }, { status: 404 });
   }
 
-  const cards = getDueCards(id);
+  const cards = await getDueCards(id);
   return NextResponse.json({ cards });
 }
 
@@ -40,17 +40,17 @@ export async function POST(
     return NextResponse.json({ error: "Invalid rating" }, { status: 400 });
   }
 
-  submitReview(cardId, rating);
+  await submitReview(cardId, rating);
 
   if (sessionId && currentIndex !== undefined && reviewedCount !== undefined) {
     if (sessionComplete) {
-      completeStudySession(sessionId);
+      await completeStudySession(sessionId);
     } else {
-      updateStudySession(sessionId, currentIndex, reviewedCount);
+      await updateStudySession(sessionId, currentIndex, reviewedCount);
     }
   }
 
-  const remaining = getDueCards(deckId);
+  const remaining = await getDueCards(deckId);
 
   return NextResponse.json({ ok: true, remainingCount: remaining.length });
 }

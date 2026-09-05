@@ -17,10 +17,13 @@ const en = {
     appName: "FlashcardAI",
   },
   auth: {
-    signIn: "Sign in",
+    signIn: "Continue to sign in",
     signOut: "Sign out",
-    loginTitle: "Welcome to FlashcardAI",
-    loginSubtitle: "Sign in to access your decks and keep your study progress.",
+    eyebrow: "Study smarter",
+    loginTitle: "Your cards. Your pace.",
+    loginSubtitle:
+      "Sign in to open your decks, spaced repetition, and quizzes — progress stays with you.",
+    loginHint: "You’ll continue securely with email and password.",
   },
   common: {
     back: "Back",
@@ -216,10 +219,13 @@ const sv: typeof en = {
     appName: "FlashcardAI",
   },
   auth: {
-    signIn: "Logga in",
+    signIn: "Fortsätt till inloggning",
     signOut: "Logga ut",
-    loginTitle: "Välkommen till FlashcardAI",
-    loginSubtitle: "Logga in för att komma åt dina kortlekar och behålla dina studieframsteg.",
+    eyebrow: "Studera smartare",
+    loginTitle: "Dina kort. Din takt.",
+    loginSubtitle:
+      "Logga in för att öppna dina kortlekar, spaced repetition och quiz — dina framsteg följer med dig.",
+    loginHint: "Du fortsätter säkert med e-post och lösenord.",
   },
   common: {
     back: "Tillbaka",
