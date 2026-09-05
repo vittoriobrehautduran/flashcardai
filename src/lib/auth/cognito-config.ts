@@ -44,10 +44,18 @@ export function getCognitoConfig(): CognitoConfig {
   };
 }
 
-// Base URL of the deployed site (e.g. "https://main.xxxxx.amplifyapp.com").
-// Falls back to the origin of the current request so local dev keeps working.
+// Base URL used for Cognito redirect_uri / logout_uri.
+// Localhost always uses the request origin (http://localhost:3000) so a
+// deployed APP_URL in .env can't send the browser to https://localhost
+// or to Amplify while you're developing locally.
 export function getAppUrl(requestUrl: string): string {
+  const origin = new URL(requestUrl).origin;
+  const isLocal =
+    origin.includes("localhost") || origin.includes("127.0.0.1");
+
+  if (isLocal) return origin;
+
   const configured = process.env.APP_URL;
   if (configured) return configured.replace(/\/$/, "");
-  return new URL(requestUrl).origin;
+  return origin;
 }
