@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  const appUrl = getAppUrl(request.url);
+  const appUrl = getAppUrl(request);
   const code = request.nextUrl.searchParams.get("code");
   const returnedState = request.nextUrl.searchParams.get("state");
 
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login`);
   }
 
-  const tokens = await exchangeCodeForTokens(code, getAuthCallbackUrl(request.url));
+  const tokens = await exchangeCodeForTokens(code, getAuthCallbackUrl(request));
   if (!tokens) {
     return NextResponse.redirect(`${appUrl}/login`);
   }

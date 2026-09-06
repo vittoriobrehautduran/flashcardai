@@ -1,7 +1,13 @@
 // Starts the login flow: sends the user to the Cognito hosted UI.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAppUrl, getAuthCallbackUrl, getCognitoConfig, getCognitoConfigError, isAuthConfigured } from "@/lib/auth/cognito-config";
+import {
+  getAppUrl,
+  getAuthCallbackUrl,
+  getCognitoConfig,
+  getCognitoConfigError,
+  isAuthConfigured,
+} from "@/lib/auth/cognito-config";
 import { AUTH_STATE_COOKIE } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
@@ -10,8 +16,8 @@ export async function GET(request: NextRequest) {
   }
 
   const { domain, clientId, oauthScopes } = getCognitoConfig();
-  const appUrl = getAppUrl(request.url);
-  const callbackUrl = getAuthCallbackUrl(request.url);
+  const appUrl = getAppUrl(request);
+  const callbackUrl = getAuthCallbackUrl(request);
 
   const configError = getCognitoConfigError();
   if (configError) {
@@ -28,6 +34,8 @@ export async function GET(request: NextRequest) {
 
   // Random state ties the callback to this login attempt (CSRF protection).
   const state = crypto.randomUUID();
+
+  console.info(`Cognito authorize redirect_uri=${callbackUrl}`);
 
   const authorizeUrl = new URL(`https://${domain}/oauth2/authorize`);
   authorizeUrl.searchParams.set("client_id", clientId);

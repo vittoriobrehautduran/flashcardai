@@ -2,11 +2,11 @@
 // Cognito hosted UI session so the next login asks for credentials again.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAppUrl, getAuthCallbackUrl, getAuthLogoutUrl, getCognitoConfig, isAuthConfigured } from "@/lib/auth/cognito-config";
+import { getAppUrl, getAuthLogoutUrl, getCognitoConfig, isAuthConfigured } from "@/lib/auth/cognito-config";
 import { ID_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const appUrl = getAppUrl(request.url);
+  const appUrl = getAppUrl(request);
 
   let redirectTarget = `${appUrl}/login`;
   if (isAuthConfigured()) {
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     // the user back to our login page (must be a registered sign-out URL).
     const logoutUrl = new URL(`https://${domain}/logout`);
     logoutUrl.searchParams.set("client_id", clientId);
-    logoutUrl.searchParams.set("logout_uri", getAuthLogoutUrl(request.url));
+    logoutUrl.searchParams.set("logout_uri", getAuthLogoutUrl(request));
     redirectTarget = logoutUrl.toString();
   }
 

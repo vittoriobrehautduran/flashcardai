@@ -2,6 +2,8 @@
 // Everything comes from environment variables so the same code works
 // locally and on Amplify without changes.
 
+import type { NextRequest } from "next/server";
+
 export interface CognitoConfig {
   userPoolId: string;
   clientId: string;
@@ -34,6 +36,10 @@ function normalizeCognitoDomain(raw: string): string {
   domain = domain.replace(/\.$/, "");
 
   return domain;
+}
+
+function isLocalHost(host: string): boolean {
+  return host.includes("localhost") || host.includes("127.0.0.1");
 }
 
 // Auth is optional until the Cognito user pool exists. When these env vars
@@ -92,20 +98,44 @@ export function getCognitoConfigError(): string | null {
   return null;
 }
 
-// Base URL used for Cognito redirect_uri / logout_uri.
-// Always uses the request origin so redirect_uri matches the URL the user
-// actually opened. A hard-coded APP_URL often drifts from the real Amplify
-// URL and causes Cognito's "An error was encountered" page.
-export function getAppUrl(requestUrl: string): string {
-  return new URL(requestUrl).origin;
+// Public site origin for Cognito redirect_uri / logout_uri.
+// Local: always the browser host (http://localhost:3000).
+// Amplify: prefer APP_URL — request.url behind Amplify SSR is often an
+// internal host, which causes Cognito redirect_mismatch.
+export function getAppUrl(request: NextRequest | string): string {
+  const configured = trimEnv(process.env.APP_URL).replace(/\/$/, "");
+
+  if (typeof request === "string") {
+    const origin = new URL(request).origin;
+    if (isLocalHost(origin)) return origin;
+    return configured || origin;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const hostHeader = request.headers.get("host")?.split(",")[0]?.trim();
+  const host = forwardedHost || hostHeader || request.nextUrl.host;
+
+  const forwardedProto = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim();
+  const proto = forwardedProto || (isLocalHost(host) ? "http" : "https");
+  const derived = `${proto}://${host}`.replace(/\/$/, "");
+
+  if (isLocalHost(host)) return derived;
+
+  // Stable Amplify URL from env beats whatever the SSR runtime thinks the host is.
+  if (configured) return configured;
+
+  return derived;
 }
 
 // The callback URL Cognito must have in "Allowed callback URLs".
-export function getAuthCallbackUrl(requestUrl: string): string {
-  return `${getAppUrl(requestUrl)}/api/auth/callback`;
+export function getAuthCallbackUrl(request: NextRequest | string): string {
+  return `${getAppUrl(request)}/api/auth/callback`;
 }
 
 // The sign-out URL Cognito must have in "Allowed sign-out URLs".
-export function getAuthLogoutUrl(requestUrl: string): string {
-  return `${getAppUrl(requestUrl)}/login`;
+export function getAuthLogoutUrl(request: NextRequest | string): string {
+  return `${getAppUrl(request)}/login`;
 }
