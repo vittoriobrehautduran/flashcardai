@@ -17,8 +17,19 @@ const MIN_CHARS_PER_PAGE = 70;
 
 type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 
+// Load pdf.js and attach the worker in-process.
+// On Amplify/Lambda the default "./pdf.worker.mjs" import fails because that
+// file is not next to pdf.mjs in the traced bundle.
 async function loadPdfJs(): Promise<PdfJsModule> {
-  return import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  // pdfjs ships this worker without type declarations.
+  // @ts-expect-error
+  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+
+  (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = worker;
+  pdfjs.GlobalWorkerOptions.workerSrc = "pdf.worker.mjs";
+
+  return pdfjs;
 }
 
 async function openPdf(buffer: Buffer) {
