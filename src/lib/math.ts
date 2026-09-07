@@ -1,8 +1,9 @@
 // AI helpers for math practice mode.
 // Handles exercise extraction from PDFs, exercise generation, and answer grading (text + image).
 
-import { generateJson, formatAiError, callWithRetryExported } from "@/lib/gemini";
+import { generateJson, formatAiError, callWithRetryExported, GEMINI_MODEL, MissingGeminiApiKeyError } from "@/lib/gemini";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getUserGeminiApiKey } from "@/lib/user-settings";
 
 export interface MathExercise {
   id: string;
@@ -145,12 +146,12 @@ export async function gradeMathImage(
   const languageRule = language === "sv" ? "Respond in Swedish." : "Respond in English.";
 
   return callWithRetryExported(async () => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
+    const apiKey = await getUserGeminiApiKey();
+    if (!apiKey) throw new MissingGeminiApiKeyError();
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
+      model: GEMINI_MODEL,
       generationConfig: { responseMimeType: "application/json" },
     });
 

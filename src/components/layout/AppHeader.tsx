@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { LanguageToggle } from "@/components/layout/LanguageToggle";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface AppHeaderProps {
@@ -27,9 +26,14 @@ export function AppHeader({ signedIn = false }: AppHeaderProps) {
             href="/"
             className="rounded-lg px-3 py-2 text-sm text-[var(--color-text-secondary)] no-underline transition-colors hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]"
           >
-            {t.nav.decks}
+            {t.nav.modules}
           </Link>
-          <LanguageToggle />
+          <Link
+            href="/settings"
+            className="rounded-lg px-3 py-2 text-sm text-[var(--color-text-secondary)] no-underline transition-colors hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]"
+          >
+            {t.nav.settings}
+          </Link>
           {signedIn && (
             <a
               href="/api/auth/logout"

@@ -37,6 +37,7 @@ export default function StudyPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [hasSeenAnswer, setHasSeenAnswer] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [reviewedCount, setReviewedCount] = useState(0);
 
@@ -54,6 +55,7 @@ export default function StudyPage() {
         setCurrentIndex(data.session.currentIndex);
         setReviewedCount(data.session.reviewedCount);
         setRevealed(false);
+        setHasSeenAnswer(false);
         return;
       }
 
@@ -81,6 +83,7 @@ export default function StudyPage() {
       setCurrentIndex(0);
       setReviewedCount(0);
       setRevealed(false);
+      setHasSeenAnswer(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : t.study.failedLoad);
     } finally {
@@ -122,6 +125,7 @@ export default function StudyPage() {
 
       setReviewedCount(nextReviewed);
       setRevealed(false);
+      setHasSeenAnswer(false);
 
       if (isLast) {
         setSessionId(null);
@@ -145,17 +149,27 @@ export default function StudyPage() {
     t,
   ]);
 
+  function toggleFlip() {
+    setRevealed((showingBack) => {
+      const next = !showingBack;
+      if (next) setHasSeenAnswer(true);
+      return next;
+    });
+  }
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!currentCard) return;
 
-      if (e.code === "Space" && !revealed) {
+      if (e.code === "Space") {
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
         e.preventDefault();
-        setRevealed(true);
+        toggleFlip();
         return;
       }
 
-      if (revealed && !submitting) {
+      if (hasSeenAnswer && !submitting) {
         const rating = Number(e.key);
         if (rating >= 1 && rating <= 4) {
           handleRating(rating);
@@ -165,7 +179,7 @@ export default function StudyPage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentCard, revealed, submitting, handleRating]);
+  }, [currentCard, hasSeenAnswer, submitting, handleRating]);
 
   if (loading) {
     return (
@@ -181,13 +195,13 @@ export default function StudyPage() {
       <div>
         <nav className="mb-4 text-sm text-[var(--color-text-muted)]">
           <Link href={`/decks/${deckId}`} className="text-[var(--color-text-secondary)] no-underline">
-            ← {t.common.backToDeck}
+            ← {t.common.backToModule}
           </Link>
         </nav>
         <EmptyState
           title={t.study.nothingDueTitle}
           description={t.study.nothingDueDescription}
-          actionLabel={t.common.backToDeck}
+          actionLabel={t.common.backToModule}
           onAction={() => window.location.href = `/decks/${deckId}`}
         />
       </div>
@@ -203,7 +217,7 @@ export default function StudyPage() {
         </p>
         <div className="mt-8 flex justify-center gap-2">
           <Link href={`/decks/${deckId}`}>
-            <Button variant="secondary">{t.common.backToDeck}</Button>
+            <Button variant="secondary">{t.common.backToModule}</Button>
           </Link>
           <Button onClick={loadSession}>{t.study.studyMore}</Button>
         </div>
@@ -215,7 +229,7 @@ export default function StudyPage() {
     <div className="mx-auto max-w-2xl">
       <nav className="mb-6 text-sm text-[var(--color-text-muted)]">
         <Link href={`/decks/${deckId}`} className="text-[var(--color-text-secondary)] no-underline hover:text-[var(--color-text-primary)]">
-          ← {t.common.backToDeck}
+          ← {t.common.backToModule}
         </Link>
       </nav>
 
@@ -234,7 +248,7 @@ export default function StudyPage() {
         <>
           <button
             type="button"
-            onClick={() => !revealed && setRevealed(true)}
+            onClick={toggleFlip}
             className="w-full text-left"
           >
             <Card className="min-h-[280px] flex flex-col justify-center transition-colors hover:border-[var(--color-border-strong)]">
@@ -244,13 +258,11 @@ export default function StudyPage() {
               <p className="mt-4 text-xl text-[var(--color-text-primary)] font-[family-name:var(--font-display)]">
                 {revealed ? currentCard.back : currentCard.front}
               </p>
-              {!revealed && (
-                <p className="mt-8 text-sm text-[var(--color-text-muted)]">{t.study.revealHint}</p>
-              )}
+              <p className="mt-8 text-sm text-[var(--color-text-muted)]">{t.study.flipHint}</p>
             </Card>
           </button>
 
-          {revealed && (
+          {hasSeenAnswer && (
             <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {ratings.map((r) => (
                 <Button

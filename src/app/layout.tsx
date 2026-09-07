@@ -21,8 +21,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "FlashcardAI",
-  description: "Personal flashcards from PDFs with spaced repetition",
+  title: "FlashStudies",
+  description: "Study modules from PDFs — flashcards, quiz, and written feedback",
 };
 
 export default async function RootLayout({

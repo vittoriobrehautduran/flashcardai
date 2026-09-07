@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -60,14 +60,18 @@ function wrongQuestionsFromIds(questions: QuizQuestion[], ids: string[]) {
 export default function QuizPage() {
   const { t, fmt, locale } = useLocale();
   const params = useParams();
+  const searchParams = useSearchParams();
   const deckId = params.id as string;
+  const modeFromUrl = searchParams.get("mode");
+  const lockedMode: QuizMode | null =
+    modeFromUrl === "written" || modeFromUrl === "choice" ? modeFromUrl : null;
 
   const [deckName, setDeckName] = useState("");
   const [allCards, setAllCards] = useState<QuizCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [quizMode, setQuizMode] = useState<QuizMode>("choice");
+  const [quizMode, setQuizMode] = useState<QuizMode>(lockedMode ?? "choice");
   const [phase, setPhase] = useState<Phase>("setup");
   const [questionCount, setQuestionCount] = useState(5);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
@@ -376,13 +380,13 @@ export default function QuizPage() {
       <div>
         <nav className="mb-4 text-sm text-[var(--color-text-muted)]">
           <Link href={`/decks/${deckId}`} className="text-[var(--color-text-secondary)] no-underline">
-            ← {t.common.backToDeck}
+            ← {t.common.backToModule}
           </Link>
         </nav>
         <EmptyState
           title={t.quiz.needMoreTitle}
           description={t.quiz.needMoreDescription}
-          actionLabel={t.common.backToDeck}
+          actionLabel={t.common.backToModule}
           onAction={() => window.location.href = `/decks/${deckId}`}
         />
       </div>
@@ -393,7 +397,7 @@ export default function QuizPage() {
     <div className="mx-auto max-w-2xl">
       <nav className="mb-4 text-sm text-[var(--color-text-muted)]" aria-label="Breadcrumb">
         <Link href="/" className="text-[var(--color-text-secondary)] no-underline hover:text-[var(--color-text-primary)]">
-          {t.nav.decks}
+          {t.nav.modules}
         </Link>
         <span className="mx-2">›</span>
         <Link href={`/decks/${deckId}`} className="text-[var(--color-text-secondary)] no-underline hover:text-[var(--color-text-primary)]">
@@ -407,8 +411,20 @@ export default function QuizPage() {
 
       {phase === "setup" && (
         <>
-          <h1 className="text-3xl text-[var(--color-text-primary)]">{t.quiz.title}</h1>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{t.quiz.subtitle}</p>
+          <h1 className="text-3xl text-[var(--color-text-primary)]">
+            {lockedMode === "written"
+              ? t.module.featureFeedback
+              : lockedMode === "choice"
+                ? t.module.featureQuiz
+                : t.quiz.title}
+          </h1>
+          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+            {lockedMode === "written"
+              ? t.module.featureFeedbackDesc
+              : lockedMode === "choice"
+                ? t.module.featureQuizDesc
+                : t.quiz.subtitle}
+          </p>
 
           {savedSession && (
             <Card className="mt-6 border-[var(--color-accent)]/30 bg-[var(--color-accent-muted)]/40">
@@ -427,35 +443,41 @@ export default function QuizPage() {
           )}
 
           <Card className="mt-8">
-            <p className="text-sm font-medium text-[var(--color-text-primary)]">{t.quiz.modeLabel}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setQuizMode("choice")}
-                className={[
-                  "rounded-lg border px-4 py-2 text-sm font-medium min-h-9",
-                  quizMode === "choice"
-                    ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
-                    : "border-[var(--color-border-strong)]",
-                ].join(" ")}
-              >
-                {t.quiz.modeChoice}
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuizMode("written")}
-                className={[
-                  "rounded-lg border px-4 py-2 text-sm font-medium min-h-9",
-                  quizMode === "written"
-                    ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
-                    : "border-[var(--color-border-strong)]",
-                ].join(" ")}
-              >
-                {t.quiz.modeWritten}
-              </button>
-            </div>
+            {!lockedMode && (
+              <>
+                <p className="text-sm font-medium text-[var(--color-text-primary)]">{t.quiz.modeLabel}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuizMode("choice")}
+                    className={[
+                      "rounded-lg border px-4 py-2 text-sm font-medium min-h-9",
+                      quizMode === "choice"
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
+                        : "border-[var(--color-border-strong)]",
+                    ].join(" ")}
+                  >
+                    {t.quiz.modeChoice}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuizMode("written")}
+                    className={[
+                      "rounded-lg border px-4 py-2 text-sm font-medium min-h-9",
+                      quizMode === "written"
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent-muted)] text-[var(--color-accent)]"
+                        : "border-[var(--color-border-strong)]",
+                    ].join(" ")}
+                  >
+                    {t.quiz.modeWritten}
+                  </button>
+                </div>
+              </>
+            )}
 
-            <p className="mt-6 text-sm font-medium text-[var(--color-text-primary)]">{t.quiz.questionCount}</p>
+            <p className={`${lockedMode ? "" : "mt-6 "}text-sm font-medium text-[var(--color-text-primary)]`}>
+              {t.quiz.questionCount}
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {countOptions.map((count) => (
                 <button
@@ -683,7 +705,7 @@ export default function QuizPage() {
 
           <div className="mt-8 flex flex-wrap justify-center gap-2">
             <Link href={`/decks/${deckId}`}>
-              <Button variant="secondary">{t.common.backToDeck}</Button>
+              <Button variant="secondary">{t.common.backToModule}</Button>
             </Link>
             <Button onClick={restartQuiz}>{t.quiz.tryAgain}</Button>
             <Link href={`/decks/${deckId}/study`}>

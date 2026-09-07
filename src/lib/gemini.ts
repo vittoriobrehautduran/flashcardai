@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai";
+import { getUserGeminiApiKey } from "@/lib/user-settings";
 
 // 3.5 Flash Lite is the current free-tier default for new API keys.
 export const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite";
@@ -11,16 +12,24 @@ export interface GenerateApiError {
   status: number;
 }
 
-function getApiKey(): string {
-  const apiKey = process.env.GEMINI_API_KEY;
+export class MissingGeminiApiKeyError extends Error {
+  constructor() {
+    super("NO_GEMINI_API_KEY");
+    this.name = "MissingGeminiApiKeyError";
+  }
+}
+
+// Each signed-in user must set their own key under Settings.
+async function resolveApiKey(): Promise<string> {
+  const apiKey = await getUserGeminiApiKey();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set. Add it to your .env.local file.");
+    throw new MissingGeminiApiKeyError();
   }
   return apiKey;
 }
 
-function getModel(json = false): GenerativeModel {
-  const genAI = new GoogleGenerativeAI(getApiKey());
+async function getModel(json = false): Promise<GenerativeModel> {
+  const genAI = new GoogleGenerativeAI(await resolveApiKey());
   return genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     generationConfig: json ? { responseMimeType: "application/json" } : undefined,
@@ -55,6 +64,16 @@ function isDailyQuotaError(message: string): boolean {
 }
 
 export function formatAiError(error: unknown, language: "en" | "sv" = "en"): GenerateApiError {
+  if (error instanceof MissingGeminiApiKeyError || String(error).includes("NO_GEMINI_API_KEY")) {
+    return {
+      status: 400,
+      message:
+        language === "sv"
+          ? "Ingen Gemini API-nyckel sparad. Öppna Inställningar och lägg till din egen nyckel från aistudio.google.com/apikey."
+          : "No Gemini API key saved. Open Settings and add your own key from aistudio.google.com/apikey.",
+    };
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
 
@@ -63,8 +82,8 @@ export function formatAiError(error: unknown, language: "en" | "sv" = "en"): Gen
       status: 401,
       message:
         language === "sv"
-          ? "Ogiltig GEMINI_API_KEY. Kontrollera nyckeln i .env.local."
-          : "Invalid GEMINI_API_KEY. Check your key in .env.local.",
+          ? "Ogiltig Gemini API-nyckel. Uppdatera nyckeln under Inställningar."
+          : "Invalid Gemini API key. Update your key under Settings.",
     };
   }
 
@@ -120,7 +139,7 @@ export async function generateJson<T>(
   userPrompt: string
 ): Promise<T> {
   return callWithRetry(async () => {
-    const model = getModel(true);
+    const model = await getModel(true);
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       systemInstruction,
@@ -140,7 +159,7 @@ export async function extractTextFromPageImage(
   pageNum: number
 ): Promise<string> {
   return callWithRetry(async () => {
-    const model = getModel(false);
+    const model = await getModel(false);
     const base64 = imageBuffer.toString("base64");
 
     const result = await model.generateContent([
@@ -168,7 +187,7 @@ Return plain text only. Preserve logical reading order. If there is no readable 
 // Send the PDF itself to Gemini Vision. Works on Amplify without pdf.js workers or native canvas.
 export async function extractTextFromPdfDocument(pdfBuffer: Buffer): Promise<string> {
   return callWithRetry(async () => {
-    const model = getModel(false);
+    const model = await getModel(false);
     const result = await model.generateContent([
       {
         inlineData: {
@@ -192,6 +211,10 @@ Return plain text only. Preserve logical reading order. If there is no readable 
   });
 }
 
-export function isGeminiConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY?.trim());
+export async function isGeminiConfigured(): Promise<boolean> {
+  try {
+    return Boolean((await getUserGeminiApiKey())?.trim());
+  } catch {
+    return false;
+  }
 }

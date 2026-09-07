@@ -24,13 +24,14 @@ export function Button({
   disabled,
   className = "",
   children,
+  type = "button",
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || loading;
 
   return (
     <button
-      type="button"
+      type={type}
       disabled={isDisabled}
       className={[
         "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors",

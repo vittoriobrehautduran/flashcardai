@@ -70,8 +70,17 @@ export const quizSessions = pgTable("quiz_sessions", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
+// Per-user app settings (Gemini key, etc.). userId = Cognito sub, or "local" when auth is off.
+export const userSettings = pgTable("user_settings", {
+  userId: text("user_id").primaryKey(),
+  // AES-GCM ciphertext of the user's own Gemini API key (never store plaintext).
+  geminiApiKeyEncrypted: text("gemini_api_key_encrypted"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
 export type Deck = typeof decks.$inferSelect;
 export type Card = typeof cards.$inferSelect;
 export type CardScheduling = typeof cardScheduling.$inferSelect;
 export type StudySession = typeof studySessions.$inferSelect;
 export type QuizSession = typeof quizSessions.$inferSelect;
+export type UserSettings = typeof userSettings.$inferSelect;

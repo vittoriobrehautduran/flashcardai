@@ -220,7 +220,7 @@ export default function MathPracticePage() {
           href="/"
           className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
         >
-          ← {t.common.backToDecks}
+          ← {t.common.backToModules}
         </Link>
         <h1 className="mt-2 text-3xl text-[var(--color-text-primary)]">{t.math.title}</h1>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{t.math.subtitle}</p>
@@ -504,7 +504,7 @@ export default function MathPracticePage() {
           <div className="flex gap-3">
             <Button onClick={handleReset}>{t.math.tryNewPdf}</Button>
             <Link href="/">
-              <Button variant="secondary">{t.common.backToDecks}</Button>
+              <Button variant="secondary">{t.common.backToModules}</Button>
             </Link>
           </div>
         </div>

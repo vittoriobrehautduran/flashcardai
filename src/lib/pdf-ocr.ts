@@ -17,7 +17,17 @@ export async function extractPdfTextWithOcr(buffer: Buffer): Promise<{
   const textLayer = (parsed.text ?? "").trim();
   const isLikelyScanned = textLayer.length < pageCount * MIN_CHARS_PER_PAGE;
 
-  if (!isLikelyScanned || !isGeminiConfigured() || buffer.length > MAX_GEMINI_PDF_BYTES) {
+  if (!isLikelyScanned || buffer.length > MAX_GEMINI_PDF_BYTES) {
+    return {
+      text: textLayer,
+      pageCount,
+      usedOcr: false,
+      usedGeminiVision: false,
+      ocrPages: [],
+    };
+  }
+
+  if (!(await isGeminiConfigured())) {
     return {
       text: textLayer,
       pageCount,

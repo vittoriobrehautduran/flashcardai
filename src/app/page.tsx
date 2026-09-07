@@ -10,7 +10,7 @@ import { Modal, ModalFooter } from "@/components/ui/Modal";
 import { Alert } from "@/components/ui/Alert";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
-interface DeckSummary {
+interface ModuleSummary {
   id: string;
   name: string;
   description: string | null;
@@ -22,21 +22,22 @@ interface DeckSummary {
 
 export default function HomePage() {
   const { t, fmt } = useLocale();
-  const [decks, setDecks] = useState<DeckSummary[]>([]);
+  const [modules, setModules] = useState<ModuleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
-  const loadDecks = useCallback(async () => {
+  const loadModules = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/decks");
       if (!res.ok) throw new Error(t.home.failedLoad);
       const data = await res.json();
-      setDecks(data);
+      setModules(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : t.common.somethingWrong);
     } finally {
@@ -44,9 +45,24 @@ export default function HomePage() {
     }
   }, [t]);
 
+  const loadApiKeyStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings");
+      if (!res.ok) {
+        setHasApiKey(false);
+        return;
+      }
+      const data = await res.json();
+      setHasApiKey(Boolean(data.hasKey));
+    } catch {
+      setHasApiKey(false);
+    }
+  }, []);
+
   useEffect(() => {
-    loadDecks();
-  }, [loadDecks]);
+    loadModules();
+    loadApiKeyStatus();
+  }, [loadModules, loadApiKeyStatus]);
 
   async function handleCreate() {
     const name = newName.trim();
@@ -62,7 +78,7 @@ export default function HomePage() {
       if (!res.ok) throw new Error(t.home.failedCreate);
       setModalOpen(false);
       setNewName("");
-      await loadDecks();
+      await loadModules();
     } catch (e) {
       setError(e instanceof Error ? e.message : t.home.failedCreate);
     } finally {
@@ -77,26 +93,19 @@ export default function HomePage() {
           <h1 className="text-3xl text-[var(--color-text-primary)]">{t.home.title}</h1>
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{t.home.subtitle}</p>
         </div>
-        <Button onClick={() => setModalOpen(true)}>{t.home.createDeck}</Button>
+        <Button onClick={() => setModalOpen(true)}>{t.home.createModule}</Button>
       </div>
 
-      {/* Math Practice card */}
-      <Link href="/math" className="mb-6 block no-underline">
-        <Card className="transition-colors hover:border-[var(--color-accent)] bg-[var(--color-accent-muted)]/30">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-[var(--color-accent)] text-white">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                <path d="M17 14v6M14 17h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-base font-medium text-[var(--color-text-primary)]">{t.math.navTitle}</h2>
-              <p className="text-xs text-[var(--color-text-secondary)]">{t.math.navDescription}</p>
-            </div>
+      {hasApiKey === false && (
+        <Alert variant="warning" className="mb-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{t.settings.missingKeyBanner}</span>
+            <Link href="/settings">
+              <Button variant="secondary">{t.settings.openSettings}</Button>
+            </Link>
           </div>
-        </Card>
-      </Link>
+        </Alert>
+      )}
 
       {error && (
         <Alert variant="error" className="mb-6">
@@ -113,11 +122,11 @@ export default function HomePage() {
             />
           ))}
         </div>
-      ) : decks.length === 0 ? (
+      ) : modules.length === 0 ? (
         <EmptyState
-          title={t.home.noDecksTitle}
-          description={t.home.noDecksDescription}
-          actionLabel={t.home.createDeck}
+          title={t.home.noModulesTitle}
+          description={t.home.noModulesDescription}
+          actionLabel={t.home.createModule}
           onAction={() => setModalOpen(true)}
           icon={
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -128,18 +137,18 @@ export default function HomePage() {
         />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2" role="list">
-          {decks.map((deck) => (
-            <li key={deck.id}>
-              <Link href={`/decks/${deck.id}`} className="block no-underline">
+          {modules.map((mod) => (
+            <li key={mod.id}>
+              <Link href={`/decks/${mod.id}`} className="block no-underline">
                 <Card className="transition-colors hover:border-[var(--color-border-strong)]">
-                  <h2 className="text-lg text-[var(--color-text-primary)]">{deck.name}</h2>
+                  <h2 className="text-lg text-[var(--color-text-primary)]">{mod.name}</h2>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge>{fmt(t.home.badgeCards, { count: deck.cardCount })}</Badge>
-                    {deck.dueCount > 0 && (
-                      <Badge variant="accent">{fmt(t.home.badgeDue, { count: deck.dueCount })}</Badge>
+                    <Badge>{fmt(t.home.badgeQuestions, { count: mod.cardCount })}</Badge>
+                    {mod.dueCount > 0 && (
+                      <Badge variant="accent">{fmt(t.home.badgeDue, { count: mod.dueCount })}</Badge>
                     )}
-                    {deck.newCount > 0 && (
-                      <Badge variant="warning">{fmt(t.home.badgeNew, { count: deck.newCount })}</Badge>
+                    {mod.newCount > 0 && (
+                      <Badge variant="warning">{fmt(t.home.badgeNew, { count: mod.newCount })}</Badge>
                     )}
                   </div>
                 </Card>
@@ -152,12 +161,12 @@ export default function HomePage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={t.home.createDeck}
+        title={t.home.createModule}
         footer={
           <ModalFooter
             onCancel={() => setModalOpen(false)}
             onConfirm={handleCreate}
-            confirmLabel={t.home.createDeck}
+            confirmLabel={t.home.createModule}
             cancelLabel={t.common.cancel}
             loading={creating}
             confirmDisabled={!newName.trim()}
@@ -165,15 +174,15 @@ export default function HomePage() {
         }
       >
         <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
-          <label htmlFor="deck-name" className="text-sm font-medium text-[var(--color-text-primary)]">
-            {t.home.deckName}
+          <label htmlFor="module-name" className="text-sm font-medium text-[var(--color-text-primary)]">
+            {t.home.moduleName}
           </label>
           <input
-            id="deck-name"
+            id="module-name"
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder={t.home.deckNamePlaceholder}
+            placeholder={t.home.moduleNamePlaceholder}
             className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]"
             autoFocus
           />

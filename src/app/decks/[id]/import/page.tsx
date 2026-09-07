@@ -167,11 +167,11 @@ export default function ImportPage() {
     <div>
       <nav className="mb-4 text-sm text-[var(--color-text-muted)]">
         <Link href="/" className="text-[var(--color-text-secondary)] no-underline hover:text-[var(--color-text-primary)]">
-          {t.nav.decks}
+          {t.nav.modules}
         </Link>
         <span className="mx-2">›</span>
         <Link href={`/decks/${deckId}`} className="text-[var(--color-text-secondary)] no-underline hover:text-[var(--color-text-primary)]">
-          {t.common.deck}
+          {t.common.module}
         </Link>
         <span className="mx-2">›</span>
         <span>{t.import.breadcrumb}</span>
