@@ -165,6 +165,33 @@ Return plain text only. Preserve logical reading order. If there is no readable 
   });
 }
 
+// Send the PDF itself to Gemini Vision. Works on Amplify without pdf.js workers or native canvas.
+export async function extractTextFromPdfDocument(pdfBuffer: Buffer): Promise<string> {
+  return callWithRetry(async () => {
+    const model = getModel(false);
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: "application/pdf",
+          data: pdfBuffer.toString("base64"),
+        },
+      },
+      {
+        text: `Extract ALL readable text from this PDF, including:
+- body text
+- headings and captions
+- text inside diagrams, charts, and images
+- labels on figures
+- math notation and exercise statements
+
+Return plain text only. Preserve logical reading order. If there is no readable text, return an empty string.`,
+      },
+    ]);
+
+    return (result.response.text() ?? "").trim();
+  });
+}
+
 export function isGeminiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY?.trim());
 }
