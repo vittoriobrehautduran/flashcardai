@@ -4,6 +4,7 @@
 // this page is the branded doorway into that flow — no app chrome.
 
 import { Suspense } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { LanguageToggle } from "@/components/layout/LanguageToggle";
 import { useLocale } from "@/components/providers/LocaleProvider";
@@ -31,7 +32,15 @@ function LoginContent() {
       <div className="login-grid pointer-events-none absolute inset-0" aria-hidden />
 
       <header className="login-fade relative z-10 flex items-center justify-between px-6 py-5 sm:px-10">
-        <span className="font-[family-name:var(--font-display)] text-xl tracking-tight text-[var(--color-text-primary)] sm:text-2xl">
+        <span className="flex items-center gap-2.5 font-[family-name:var(--font-display)] text-xl tracking-tight text-[var(--color-text-primary)] sm:text-2xl">
+          <Image
+            src="/brand/flashstudies-logo.png"
+            alt=""
+            width={36}
+            height={36}
+            className="size-9 rounded-lg"
+            priority
+          />
           {t.nav.appName}
         </span>
         <LanguageToggle />

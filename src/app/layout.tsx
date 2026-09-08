@@ -23,6 +23,10 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "FlashStudies",
   description: "Study modules from PDFs — flashcards, quiz, and written feedback",
+  icons: {
+    icon: [{ url: "/brand/flashstudies-logo.png", type: "image/png" }],
+    apple: [{ url: "/brand/flashstudies-logo.png", type: "image/png" }],
+  },
 };
 
 export default async function RootLayout({
