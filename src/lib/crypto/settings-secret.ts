@@ -7,6 +7,8 @@ function getEncryptionKey(): Buffer {
   const secret =
     process.env.SETTINGS_SECRET?.trim() ||
     process.env.NEON_CONNECTION_STRING?.trim() ||
+    process.env.DATABASE_URL_UNPOOLED?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
     process.env.COGNITO_CLIENT_SECRET?.trim();
 
   if (!secret) {

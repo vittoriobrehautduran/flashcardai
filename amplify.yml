@@ -12,7 +12,7 @@ frontend:
         # into .env.production so Next.js loads them at runtime.
         # (|| true keeps the build alive if a var group isn't set yet.)
         # Note: Gemini keys are per-user in Settings — do not ship GEMINI_API_KEY.
-        - env | grep -e NEON_CONNECTION_STRING -e COGNITO_ -e SETTINGS_SECRET -e GEMINI_MODEL -e APP_URL >> .env.production || true
+        - env | grep -e NEON_CONNECTION_STRING -e DATABASE_URL -e COGNITO_ -e SETTINGS_SECRET -e GEMINI_MODEL -e APP_URL >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next
