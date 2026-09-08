@@ -93,13 +93,15 @@ export default function QuizPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/decks/${deckId}`);
+      // Need the question bank for quiz setup (hub page skips cards by default).
+      const res = await fetch(`/api/decks/${deckId}?cards=1`);
       if (!res.ok) throw new Error(t.quiz.failedLoad);
       const data = await res.json();
-      setDeckName(data.deck.name);
-      setAllCards(data.cards);
+      const cards = Array.isArray(data.cards) ? data.cards : [];
+      setDeckName(data.deck?.name ?? "");
+      setAllCards(cards);
 
-      const options = getQuizQuestionCountOptions(data.cards.length);
+      const options = getQuizQuestionCountOptions(cards.length);
       if (options.length > 0) {
         setQuestionCount(options[options.length - 1]);
       }
