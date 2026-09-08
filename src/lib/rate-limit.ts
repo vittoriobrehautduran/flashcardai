@@ -47,6 +47,9 @@ export const RATE_LIMITS = {
   generate: { limit: 30, windowMs: 60 * 60 * 1000 }, // 30/hour
   pdfExtract: { limit: 20, windowMs: 60 * 60 * 1000 }, // 20/hour
   mathExtract: { limit: 20, windowMs: 60 * 60 * 1000 },
+  mathExercises: { limit: 20, windowMs: 60 * 60 * 1000 },
+  mathLesson: { limit: 20, windowMs: 60 * 60 * 1000 },
+  mathLessonHelp: { limit: 60, windowMs: 60 * 60 * 1000 },
   mathEvaluate: { limit: 60, windowMs: 60 * 60 * 1000 },
   quizGenerate: { limit: 30, windowMs: 60 * 60 * 1000 },
   quizEvaluate: { limit: 120, windowMs: 60 * 60 * 1000 },

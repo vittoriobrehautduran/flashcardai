@@ -32,7 +32,21 @@ interface ExerciseResult {
   hadImage: boolean;
 }
 
-type Phase = "upload" | "practice" | "results";
+interface LessonStep {
+  id: string;
+  title: string;
+  explanation: string;
+  example: string;
+  tip: string;
+}
+
+type Phase =
+  | "upload"
+  | "choose"
+  | "learn"
+  | "learnDone"
+  | "practice"
+  | "results";
 
 export default function MathPracticePage() {
   const { t, fmt, locale } = useLocale();
@@ -40,14 +54,16 @@ export default function MathPracticePage() {
   const [phase, setPhase] = useState<Phase>("upload");
   const [error, setError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [preparing, setPreparing] = useState<"learn" | "practice" | null>(null);
   const [language, setLanguage] = useState<AppLocale>(locale);
 
-  // Exercise data from PDF
+  // Imported PDF text — kept in memory until user picks Learn or Practice
+  const [documentText, setDocumentText] = useState("");
+
+  // Practice data
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [source, setSource] = useState<"extracted" | "generated">("extracted");
   const [topic, setTopic] = useState("");
-
-  // Practice state
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userAnswer, setUserAnswer] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -57,9 +73,16 @@ export default function MathPracticePage() {
   const [currentEval, setCurrentEval] = useState<Evaluation | null>(null);
   const [results, setResults] = useState<ExerciseResult[]>([]);
 
+  // Learn data
+  const [lessonSteps, setLessonSteps] = useState<LessonStep[]>([]);
+  const [lessonIndex, setLessonIndex] = useState(0);
+  const [helpBusy, setHelpBusy] = useState(false);
+  const [extraHelp, setExtraHelp] = useState<string | null>(null);
+  const [quizQuestion, setQuizQuestion] = useState<string | null>(null);
+  const [quizHint, setQuizHint] = useState<string | null>(null);
+
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // Upload PDF and extract exercises
   async function handleFileSelect(file: File) {
     setError(null);
     setExtracting(true);
@@ -73,17 +96,14 @@ export default function MathPracticePage() {
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error ?? t.math.failedExtract);
+      if (!data.text?.trim()) throw new Error(t.math.failedExtract);
 
-      if (!data.exercises?.length) {
-        throw new Error(t.math.noExercises);
-      }
-
-      setExercises(data.exercises);
-      setSource(data.source);
-      setTopic(data.topic ?? "");
-      setCurrentIndex(0);
+      setDocumentText(data.text);
+      setExercises([]);
+      setLessonSteps([]);
       setResults([]);
-      setPhase("practice");
+      setTopic("");
+      setPhase("choose");
     } catch (e) {
       setError(e instanceof Error ? e.message : t.math.failedExtract);
     } finally {
@@ -91,7 +111,109 @@ export default function MathPracticePage() {
     }
   }
 
-  // Handle image upload for handwritten solution
+  async function startLearn() {
+    setError(null);
+    setPreparing("learn");
+    try {
+      const res = await fetch("/api/math/lesson", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: documentText, language }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? t.math.failedLesson);
+      if (!data.steps?.length) throw new Error(t.math.failedLesson);
+
+      setLessonSteps(data.steps);
+      setTopic(data.topic ?? "");
+      setLessonIndex(0);
+      setExtraHelp(null);
+      setQuizQuestion(null);
+      setQuizHint(null);
+      setPhase("learn");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.math.failedLesson);
+    } finally {
+      setPreparing(null);
+    }
+  }
+
+  async function startPractice() {
+    setError(null);
+    setPreparing("practice");
+    try {
+      const res = await fetch("/api/math/exercises", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: documentText, language }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? t.math.failedExercises);
+      if (!data.exercises?.length) throw new Error(t.math.noExercises);
+
+      setExercises(data.exercises);
+      setSource(data.source === "generated" ? "generated" : "extracted");
+      setTopic(data.topic ?? topic);
+      setCurrentIndex(0);
+      setResults([]);
+      setUserAnswer("");
+      setCurrentEval(null);
+      clearImage();
+      setPhase("practice");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.math.failedExercises);
+    } finally {
+      setPreparing(null);
+    }
+  }
+
+  async function requestLessonHelp(action: "deeper" | "quiz") {
+    const step = lessonSteps[lessonIndex];
+    if (!step) return;
+
+    setHelpBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/math/lesson", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: documentText,
+          language,
+          action,
+          step,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? t.math.failedLesson);
+
+      if (action === "deeper") {
+        setExtraHelp(data.content ?? "");
+        setQuizQuestion(null);
+        setQuizHint(null);
+      } else {
+        setQuizQuestion(data.quizQuestion || data.content || "");
+        setQuizHint(data.quizHint || null);
+        setExtraHelp(data.content && data.quizQuestion ? data.content : null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.math.failedLesson);
+    } finally {
+      setHelpBusy(false);
+    }
+  }
+
+  function handleNextLessonStep() {
+    setExtraHelp(null);
+    setQuizQuestion(null);
+    setQuizHint(null);
+    if (lessonIndex < lessonSteps.length - 1) {
+      setLessonIndex((i) => i + 1);
+    } else {
+      setPhase("learnDone");
+    }
+  }
+
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -102,7 +224,6 @@ export default function MathPracticePage() {
     reader.onload = () => {
       const dataUrl = reader.result as string;
       setImagePreview(dataUrl);
-      // Strip the data URL prefix to get pure base64
       const base64 = dataUrl.split(",")[1];
       setImageBase64(base64);
     };
@@ -115,7 +236,6 @@ export default function MathPracticePage() {
     if (imageInputRef.current) imageInputRef.current.value = "";
   }
 
-  // Submit answer for grading
   async function handleSubmit() {
     if (!userAnswer.trim() && !imageBase64) return;
 
@@ -147,8 +267,6 @@ export default function MathPracticePage() {
       };
 
       setCurrentEval(evaluation);
-
-      // Save result
       setResults((prev) => [
         ...prev,
         {
@@ -165,7 +283,6 @@ export default function MathPracticePage() {
     }
   }
 
-  // Move to next exercise or show results
   function handleNext() {
     if (currentIndex < exercises.length - 1) {
       setCurrentIndex((i) => i + 1);
@@ -177,7 +294,6 @@ export default function MathPracticePage() {
     }
   }
 
-  // Skip current exercise
   function handleSkip() {
     setResults((prev) => [
       ...prev,
@@ -191,19 +307,24 @@ export default function MathPracticePage() {
     handleNext();
   }
 
-  // Start over with a new PDF
   function handleReset() {
     setPhase("upload");
+    setDocumentText("");
     setExercises([]);
+    setLessonSteps([]);
     setResults([]);
     setCurrentIndex(0);
+    setLessonIndex(0);
     setUserAnswer("");
     setCurrentEval(null);
+    setExtraHelp(null);
+    setQuizQuestion(null);
+    setQuizHint(null);
+    setTopic("");
     clearImage();
     setError(null);
   }
 
-  // Calculate total score from results
   const answeredResults = results.filter((r) => r.evaluation);
   const totalScore = answeredResults.length
     ? Math.round(
@@ -212,9 +333,10 @@ export default function MathPracticePage() {
       )
     : 0;
 
+  const currentStep = lessonSteps[lessonIndex];
+
   return (
     <div>
-      {/* Header */}
       <div className="mb-6">
         <Link
           href="/"
@@ -232,7 +354,6 @@ export default function MathPracticePage() {
         </Alert>
       )}
 
-      {/* Upload Phase */}
       {phase === "upload" && (
         <div className="space-y-6">
           <Card>
@@ -272,17 +393,170 @@ export default function MathPracticePage() {
         </div>
       )}
 
-      {/* Practice Phase */}
+      {phase === "choose" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl text-[var(--color-text-primary)]">{t.math.chooseTitle}</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{t.math.chooseSubtitle}</p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card className="flex flex-col">
+              <h3 className="text-lg text-[var(--color-text-primary)]">{t.math.chooseLearnTitle}</h3>
+              <p className="mt-2 flex-1 text-sm text-[var(--color-text-secondary)]">
+                {t.math.chooseLearnDesc}
+              </p>
+              <Button
+                className="mt-4 w-full"
+                onClick={startLearn}
+                loading={preparing === "learn"}
+                disabled={preparing !== null}
+              >
+                {preparing === "learn" ? t.math.preparingLearn : t.math.chooseLearnTitle}
+              </Button>
+            </Card>
+
+            <Card className="flex flex-col">
+              <h3 className="text-lg text-[var(--color-text-primary)]">{t.math.choosePracticeTitle}</h3>
+              <p className="mt-2 flex-1 text-sm text-[var(--color-text-secondary)]">
+                {t.math.choosePracticeDesc}
+              </p>
+              <Button
+                className="mt-4 w-full"
+                variant="secondary"
+                onClick={startPractice}
+                loading={preparing === "practice"}
+                disabled={preparing !== null}
+              >
+                {preparing === "practice" ? t.math.preparingPractice : t.math.choosePracticeTitle}
+              </Button>
+            </Card>
+          </div>
+
+          <Button variant="ghost" onClick={handleReset}>
+            {t.math.tryNewPdf}
+          </Button>
+        </div>
+      )}
+
+      {phase === "learn" && currentStep && (
+        <div className="space-y-4">
+          <ProgressBar
+            value={lessonIndex + 1}
+            max={lessonSteps.length}
+            label={fmt(t.math.stepOf, {
+              current: lessonIndex + 1,
+              total: lessonSteps.length,
+            })}
+          />
+
+          {topic && <Badge variant="accent">{topic}</Badge>}
+
+          <Card>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+              {fmt(t.math.stepLabel, { num: lessonIndex + 1 })}
+            </p>
+            <h2 className="text-xl text-[var(--color-text-primary)]">{currentStep.title}</h2>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
+              {currentStep.explanation}
+            </p>
+          </Card>
+
+          {currentStep.example && (
+            <Card className="!bg-[var(--color-surface)]">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                {t.math.exampleLabel}
+              </h3>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
+                {currentStep.example}
+              </p>
+            </Card>
+          )}
+
+          {currentStep.tip && (
+            <Alert variant="warning">
+              <span className="font-medium">{t.math.tipLabel}: </span>
+              {currentStep.tip}
+            </Alert>
+          )}
+
+          {extraHelp && (
+            <Card>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
+                {extraHelp}
+              </p>
+            </Card>
+          )}
+
+          {quizQuestion && (
+            <Card className="border-[var(--color-accent)]/40">
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">{quizQuestion}</p>
+              {quizHint && (
+                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                  {t.math.quizHint}: {quizHint}
+                </p>
+              )}
+            </Card>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleNextLessonStep}>
+              {lessonIndex < lessonSteps.length - 1 ? t.math.gotIt : t.math.finishLesson}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => requestLessonHelp("deeper")}
+              loading={helpBusy}
+            >
+              {helpBusy ? t.math.helping : t.math.explainMore}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => requestLessonHelp("quiz")}
+              disabled={helpBusy}
+            >
+              {t.math.quizMe}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {phase === "learnDone" && (
+        <div className="space-y-6">
+          <Card>
+            <h2 className="text-xl text-[var(--color-text-primary)]">{t.math.lessonComplete}</h2>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+              {t.math.lessonCompleteDesc}
+            </p>
+            {topic && (
+              <Badge variant="accent" className="mt-3">
+                {topic}
+              </Badge>
+            )}
+          </Card>
+
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={startPractice} loading={preparing === "practice"}>
+              {preparing === "practice" ? t.math.preparingPractice : t.math.goPractice}
+            </Button>
+            <Button variant="secondary" onClick={() => setPhase("choose")}>
+              {t.math.backToChoice}
+            </Button>
+            <Button variant="ghost" onClick={handleReset}>
+              {t.math.tryNewPdf}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {phase === "practice" && exercises[currentIndex] && (
         <div className="space-y-4">
-          {/* Progress bar */}
           <ProgressBar
             value={currentIndex + 1}
             max={exercises.length}
             label={fmt(t.math.exerciseOf, { current: currentIndex + 1, total: exercises.length })}
           />
 
-          {/* Topic badge */}
           {topic && (
             <div className="flex items-center gap-2">
               <Badge variant="accent">{topic}</Badge>
@@ -292,7 +566,6 @@ export default function MathPracticePage() {
             </div>
           )}
 
-          {/* Exercise card */}
           <Card>
             <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
               {fmt(t.math.exerciseLabel, { num: currentIndex + 1 })}
@@ -302,23 +575,20 @@ export default function MathPracticePage() {
             </p>
           </Card>
 
-          {/* Answer input (only show if not graded yet) */}
           {!currentEval && (
             <Card>
               <h3 className="mb-3 text-sm font-medium text-[var(--color-text-primary)]">
                 {t.math.yourSolution}
               </h3>
 
-              {/* Text input */}
               <textarea
                 value={userAnswer}
                 onChange={(e) => setUserAnswer(e.target.value)}
                 placeholder={t.math.typeSolution}
                 rows={4}
-                className="w-full rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] resize-y"
+                className="w-full resize-y rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]"
               />
 
-              {/* Image upload */}
               <div className="mt-3">
                 <input
                   ref={imageInputRef}
@@ -338,32 +608,21 @@ export default function MathPracticePage() {
                     />
                     <button
                       onClick={clearImage}
-                      className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full bg-[var(--color-danger)] text-white text-xs"
+                      className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full bg-[var(--color-danger)] text-xs text-white"
                       aria-label={t.common.remove}
                     >
                       ✕
                     </button>
                   </div>
                 ) : (
-                  <Button
-                    variant="secondary"
-                    onClick={() => imageInputRef.current?.click()}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-                      <circle cx="8.5" cy="10.5" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M21 17l-5-5-3 3-2-2-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                  <Button variant="secondary" onClick={() => imageInputRef.current?.click()}>
                     {t.math.uploadPhoto}
                   </Button>
                 )}
               </div>
 
-              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                {t.math.answerHint}
-              </p>
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">{t.math.answerHint}</p>
 
-              {/* Submit / Skip buttons */}
               <div className="mt-4 flex gap-3">
                 <Button
                   onClick={handleSubmit}
@@ -379,10 +638,8 @@ export default function MathPracticePage() {
             </Card>
           )}
 
-          {/* Evaluation result */}
           {currentEval && (
             <Card>
-              {/* Score */}
               <div className="mb-4 flex items-center gap-3">
                 <div
                   className={`flex size-14 items-center justify-center rounded-full text-lg font-bold ${
@@ -405,19 +662,17 @@ export default function MathPracticePage() {
                 </div>
               </div>
 
-              {/* Model solution */}
               {currentEval.modelSolution && (
                 <div className="rounded-lg bg-[var(--color-surface)] p-4">
                   <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
                     {t.math.modelSolution}
                   </h4>
-                  <p className="whitespace-pre-wrap text-sm text-[var(--color-text-primary)] leading-relaxed">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
                     {currentEval.modelSolution}
                   </p>
                 </div>
               )}
 
-              {/* Next button */}
               <div className="mt-4">
                 <Button onClick={handleNext}>
                   {currentIndex < exercises.length - 1 ? t.math.nextExercise : t.math.seeResults}
@@ -428,10 +683,8 @@ export default function MathPracticePage() {
         </div>
       )}
 
-      {/* Results Phase */}
       {phase === "results" && (
         <div className="space-y-6">
-          {/* Summary card */}
           <Card>
             <h2 className="text-xl text-[var(--color-text-primary)]">{t.math.practiceComplete}</h2>
 
@@ -455,13 +708,16 @@ export default function MathPracticePage() {
                   })}
                 </p>
                 <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                  {totalScore >= 70 ? t.quiz.strong : totalScore >= 40 ? t.quiz.gettingThere : t.quiz.keepPracticing}
+                  {totalScore >= 70
+                    ? t.quiz.strong
+                    : totalScore >= 40
+                      ? t.quiz.gettingThere
+                      : t.quiz.keepPracticing}
                 </p>
               </div>
             </div>
           </Card>
 
-          {/* Per-exercise breakdown */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)]">{t.math.breakdown}</h3>
             {results.map((r, i) => (
@@ -482,7 +738,9 @@ export default function MathPracticePage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-[var(--color-text-primary)]">
-                      <span className="font-medium">{fmt(t.math.exerciseLabel, { num: i + 1 })}:</span>{" "}
+                      <span className="font-medium">
+                        {fmt(t.math.exerciseLabel, { num: i + 1 })}:
+                      </span>{" "}
                       {r.exercise.problem.slice(0, 120)}
                       {r.exercise.problem.length > 120 ? "…" : ""}
                     </p>
@@ -500,7 +758,6 @@ export default function MathPracticePage() {
             ))}
           </div>
 
-          {/* Action buttons */}
           <div className="flex gap-3">
             <Button onClick={handleReset}>{t.math.tryNewPdf}</Button>
             <Link href="/">
