@@ -24,6 +24,7 @@ interface QuestionItem {
 }
 
 interface ModuleProgress {
+  cardCount: number;
   studiedCount: number;
   dueCount: number;
   newCount: number;
@@ -40,8 +41,9 @@ export default function ModulePage() {
   const moduleId = params.id as string;
 
   const [moduleData, setModuleData] = useState<ModuleData | null>(null);
-  const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [questions, setQuestions] = useState<QuestionItem[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [progress, setProgress] = useState<ModuleProgress | null>(null);
@@ -51,16 +53,12 @@ export default function ModulePage() {
     setLoading(true);
     setError(null);
     try {
+      // One request: module + progress (no full question dump until needed).
       const res = await fetch(`/api/decks/${moduleId}`);
       if (!res.ok) throw new Error(t.module.failedLoad);
       const data = await res.json();
       setModuleData(data.deck);
-      setQuestions(data.cards);
-
-      const progressRes = await fetch(`/api/decks/${moduleId}/progress`);
-      if (progressRes.ok) {
-        setProgress(await progressRes.json());
-      }
+      setProgress(data.progress ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : t.module.failedLoad);
     } finally {
@@ -72,11 +70,40 @@ export default function ModulePage() {
     loadModule();
   }, [loadModule]);
 
+  async function loadQuestions() {
+    if (questions !== null) return;
+    setLoadingQuestions(true);
+    try {
+      const res = await fetch(`/api/decks/${moduleId}?cards=1`);
+      if (!res.ok) throw new Error(t.module.failedLoad);
+      const data = await res.json();
+      setQuestions(data.cards ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.module.failedLoad);
+    } finally {
+      setLoadingQuestions(false);
+    }
+  }
+
+  async function handleToggleQuestions() {
+    const next = !showQuestions;
+    setShowQuestions(next);
+    if (next) await loadQuestions();
+  }
+
   async function handleDeleteQuestion(cardId: string) {
     setDeletingId(cardId);
     try {
       await fetch(`/api/cards/${cardId}`, { method: "DELETE" });
-      setQuestions((prev) => prev.filter((q) => q.id !== cardId));
+      setQuestions((prev) => (prev ? prev.filter((q) => q.id !== cardId) : prev));
+      setProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              cardCount: Math.max(0, prev.cardCount - 1),
+            }
+          : prev
+      );
     } catch {
       setError(t.module.failedDelete);
     } finally {
@@ -115,7 +142,8 @@ export default function ModulePage() {
     });
   }
 
-  const hasQuestions = questions.length > 0;
+  const questionCount = progress?.cardCount ?? questions?.length ?? 0;
+  const hasQuestions = questionCount > 0;
 
   const features = [
     {
@@ -169,7 +197,7 @@ export default function ModulePage() {
       <div className="mb-8">
         <h1 className="text-3xl text-[var(--color-text-primary)]">{moduleData.name}</h1>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          {fmt(t.module.questionCount, { count: questions.length })}
+          {fmt(t.module.questionCount, { count: questionCount })}
         </p>
       </div>
 
@@ -274,12 +302,12 @@ export default function ModulePage() {
                   {t.module.manageSubtitle}
                 </p>
               </div>
-              <Button variant="ghost" onClick={() => setShowQuestions((v) => !v)}>
+              <Button variant="ghost" onClick={handleToggleQuestions} loading={loadingQuestions}>
                 {showQuestions ? t.module.hideQuestions : t.module.showQuestions}
               </Button>
             </div>
 
-            {showQuestions && (
+            {showQuestions && questions && (
               <ul className="space-y-3" role="list">
                 {questions.map((q) => (
                   <li key={q.id}>

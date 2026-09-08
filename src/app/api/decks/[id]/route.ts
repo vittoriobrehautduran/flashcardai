@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { deleteDeck, listCards, updateDeck } from "@/lib/decks";
+import { getDeckProgress } from "@/lib/progress";
 import { requireApiUser, requireOwnedDeck } from "@/lib/api-route";
 import { publicErrorMessage } from "@/lib/safe-log";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireApiUser();
@@ -14,8 +15,18 @@ export async function GET(
   const owned = await requireOwnedDeck(id, auth.user.id);
   if ("response" in owned) return owned.response;
 
-  const cards = await listCards(id);
-  return NextResponse.json({ deck: owned.deck, cards });
+  // Progress comes with the hub payload so the UI only needs one request.
+  // Cards are optional — loading hundreds of questions wakes Neon for nothing
+  // until the user opens the question list.
+  const includeCards = new URL(request.url).searchParams.get("cards") === "1";
+  const progress = await getDeckProgress(id);
+  const cards = includeCards ? await listCards(id) : undefined;
+
+  return NextResponse.json({
+    deck: owned.deck,
+    progress,
+    ...(includeCards ? { cards } : {}),
+  });
 }
 
 export async function PATCH(

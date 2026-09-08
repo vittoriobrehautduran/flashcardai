@@ -57,6 +57,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login`);
   }
 
+  // One profile upsert at login — not on every later API call.
+  try {
+    const { syncUserProfile } = await import("@/lib/auth/require-user");
+    await syncUserProfile(user);
+  } catch (error) {
+    console.error("Profile sync after login failed");
+  }
+
   const secure = appUrl.startsWith("https://");
   const response = NextResponse.redirect(`${appUrl}${nextPath}`);
 

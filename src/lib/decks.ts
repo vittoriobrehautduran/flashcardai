@@ -1,6 +1,6 @@
 import { eq, and, lte, count, sql, desc } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
-import { ensureAppSchema, getDb } from "@/db";
+import { getDb } from "@/db";
 import { decks, cards, cardScheduling, type Deck, type Card } from "@/db/schema";
 import {
   newFsrsCard,
@@ -9,10 +9,15 @@ import {
   schedulingFromFsrsCard,
   type Grade,
 } from "@/lib/fsrs";
+import { NON_ADMIN_MODULE_LIMIT } from "@/lib/auth/require-user";
 import {
-  isCurrentUserAdmin,
-  NON_ADMIN_MODULE_LIMIT,
-} from "@/lib/auth/require-user";
+  CACHE_TTL,
+  cacheGet,
+  cacheKeys,
+  cacheSet,
+  invalidateModuleData,
+  invalidateUserModuleList,
+} from "@/lib/ttl-cache";
 
 export interface DeckWithStats extends Deck {
   cardCount: number;
@@ -33,41 +38,61 @@ export class ModuleLimitError extends Error {
 }
 
 export async function listDecks(userId: string): Promise<DeckWithStats[]> {
-  await ensureAppSchema();
+  const key = cacheKeys.moduleList(userId);
+  const cached = cacheGet<DeckWithStats[]>(key);
+  if (cached) return cached;
+
   const db = getDb();
   const now = new Date();
 
-  const allDecks = await db
-    .select()
+  // One query for all modules + counts (avoids N extra round trips).
+  const rows = await db
+    .select({
+      id: decks.id,
+      userId: decks.userId,
+      name: decks.name,
+      description: decks.description,
+      createdAt: decks.createdAt,
+      updatedAt: decks.updatedAt,
+      cardCount: sql<number>`coalesce(count(${cards.id}), 0)`,
+      dueCount: sql<number>`coalesce(sum(case when ${cardScheduling.due} <= ${now} then 1 else 0 end), 0)`,
+      newCount: sql<number>`coalesce(sum(case when ${cardScheduling.reps} = 0 then 1 else 0 end), 0)`,
+    })
     .from(decks)
+    .leftJoin(cards, eq(cards.deckId, decks.id))
+    .leftJoin(cardScheduling, eq(cards.id, cardScheduling.cardId))
     .where(eq(decks.userId, userId))
+    .groupBy(
+      decks.id,
+      decks.userId,
+      decks.name,
+      decks.description,
+      decks.createdAt,
+      decks.updatedAt
+    )
     .orderBy(desc(decks.updatedAt));
 
-  const result: DeckWithStats[] = [];
-  for (const deck of allDecks) {
-    const [stats] = await db
-      .select({
-        total: count(),
-        due: sql<number>`sum(case when ${cardScheduling.due} <= ${now} then 1 else 0 end)`,
-        newCards: sql<number>`sum(case when ${cardScheduling.reps} = 0 then 1 else 0 end)`,
-      })
-      .from(cards)
-      .leftJoin(cardScheduling, eq(cards.id, cardScheduling.cardId))
-      .where(eq(cards.deckId, deck.id));
+  const result = rows.map((row) => ({
+    id: row.id,
+    userId: row.userId,
+    name: row.name,
+    description: row.description,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    cardCount: Number(row.cardCount ?? 0),
+    dueCount: Number(row.dueCount ?? 0),
+    newCount: Number(row.newCount ?? 0),
+  }));
 
-    result.push({
-      ...deck,
-      cardCount: stats?.total ?? 0,
-      dueCount: Number(stats?.due ?? 0),
-      newCount: Number(stats?.newCards ?? 0),
-    });
-  }
-
+  cacheSet(key, result, CACHE_TTL.moduleListMs);
   return result;
 }
 
 export async function countDecksForUser(userId: string): Promise<number> {
-  await ensureAppSchema();
+  // Reuse the module list cache when warm so create-limit checks stay cheap.
+  const cached = cacheGet<DeckWithStats[]>(cacheKeys.moduleList(userId));
+  if (cached) return cached.length;
+
   const db = getDb();
   const [row] = await db
     .select({ total: count() })
@@ -77,7 +102,6 @@ export async function countDecksForUser(userId: string): Promise<number> {
 }
 
 export async function getDeck(id: string): Promise<Deck | undefined> {
-  await ensureAppSchema();
   const db = getDb();
   const [deck] = await db.select().from(decks).where(eq(decks.id, id)).limit(1);
   return deck;
@@ -88,26 +112,30 @@ export async function getDeckForUser(
   id: string,
   userId: string
 ): Promise<Deck | undefined> {
-  await ensureAppSchema();
+  const key = cacheKeys.module(userId, id);
+  const cached = cacheGet<Deck | null>(key);
+  if (cached !== undefined) return cached ?? undefined;
+
   const db = getDb();
   const [deck] = await db
     .select()
     .from(decks)
     .where(and(eq(decks.id, id), eq(decks.userId, userId)))
     .limit(1);
+
+  cacheSet(key, deck ?? null, CACHE_TTL.moduleMs);
   return deck;
 }
 
 export async function createDeck(
   userId: string,
   name: string,
-  description?: string
+  description: string | undefined,
+  isAdmin: boolean
 ): Promise<Deck> {
-  await ensureAppSchema();
   const db = getDb();
 
-  const admin = await isCurrentUserAdmin(userId);
-  if (!admin) {
+  if (!isAdmin) {
     const existing = await countDecksForUser(userId);
     if (existing >= NON_ADMIN_MODULE_LIMIT) {
       throw new ModuleLimitError(NON_ADMIN_MODULE_LIMIT);
@@ -124,6 +152,7 @@ export async function createDeck(
     updatedAt: now,
   };
   await db.insert(decks).values(deck);
+  invalidateUserModuleList(userId);
   return deck;
 }
 
@@ -133,28 +162,39 @@ export async function updateDeck(
   name: string,
   description?: string
 ): Promise<Deck | undefined> {
-  await ensureAppSchema();
   const db = getDb();
   const now = new Date();
   await db
     .update(decks)
     .set({ name, description: description ?? null, updatedAt: now })
     .where(and(eq(decks.id, id), eq(decks.userId, userId)));
+  invalidateModuleData(userId, id);
   return getDeckForUser(id, userId);
 }
 
 export async function deleteDeck(id: string, userId: string): Promise<boolean> {
-  await ensureAppSchema();
   const db = getDb();
   const owned = await getDeckForUser(id, userId);
   if (!owned) return false;
   await db.delete(decks).where(and(eq(decks.id, id), eq(decks.userId, userId)));
+  invalidateModuleData(userId, id);
   return true;
 }
 
 export async function listCards(deckId: string): Promise<Card[]> {
+  const key = cacheKeys.cards(deckId);
+  const cached = cacheGet<Card[]>(key);
+  if (cached) return cached;
+
   const db = getDb();
-  return db.select().from(cards).where(eq(cards.deckId, deckId)).orderBy(cards.createdAt);
+  const result = await db
+    .select()
+    .from(cards)
+    .where(eq(cards.deckId, deckId))
+    .orderBy(cards.createdAt);
+
+  cacheSet(key, result, CACHE_TTL.cardsMs);
+  return result;
 }
 
 export async function createCard(
@@ -192,6 +232,13 @@ export async function createCard(
 
   await db.update(decks).set({ updatedAt: now }).where(eq(decks.id, deckId));
 
+  const [owner] = await db
+    .select({ userId: decks.userId })
+    .from(decks)
+    .where(eq(decks.id, deckId))
+    .limit(1);
+  if (owner) invalidateModuleData(owner.userId, deckId);
+
   return card;
 }
 
@@ -211,10 +258,9 @@ export async function deleteCardForUser(
   cardId: string,
   userId: string
 ): Promise<boolean> {
-  await ensureAppSchema();
   const db = getDb();
   const [row] = await db
-    .select({ cardId: cards.id })
+    .select({ cardId: cards.id, deckId: cards.deckId })
     .from(cards)
     .innerJoin(decks, eq(cards.deckId, decks.id))
     .where(and(eq(cards.id, cardId), eq(decks.userId, userId)))
@@ -222,6 +268,7 @@ export async function deleteCardForUser(
 
   if (!row) return false;
   await db.delete(cards).where(eq(cards.id, cardId));
+  invalidateModuleData(userId, row.deckId);
   return true;
 }
 
@@ -325,4 +372,13 @@ export async function submitReview(cardId: string, rating: Grade): Promise<void>
       lastReview: updated.lastReview,
     })
     .where(eq(cardScheduling.cardId, cardId));
+
+  // Clear progress/list caches for this card's module so due counts stay honest.
+  const [owned] = await db
+    .select({ deckId: cards.deckId, userId: decks.userId })
+    .from(cards)
+    .innerJoin(decks, eq(cards.deckId, decks.id))
+    .where(eq(cards.id, cardId))
+    .limit(1);
+  if (owned) invalidateModuleData(owned.userId, owned.deckId);
 }

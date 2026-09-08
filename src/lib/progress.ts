@@ -6,6 +6,7 @@ import {
   cardScheduling,
   studySessions,
   quizSessions,
+  decks,
 } from "@/db/schema";
 import {
   deserializeQuizQuestions,
@@ -13,6 +14,14 @@ import {
   type SerializedQuizQuestion,
 } from "@/lib/quiz-session";
 import type { QuizQuestion } from "@/lib/quiz";
+import {
+  CACHE_TTL,
+  cacheDelete,
+  cacheGet,
+  cacheKeys,
+  cacheSet,
+  invalidateModuleData,
+} from "@/lib/ttl-cache";
 
 export interface DeckProgress {
   cardCount: number;
@@ -37,7 +46,45 @@ export interface DeckProgress {
   } | null;
 }
 
+async function invalidateProgressForDeck(deckId: string): Promise<void> {
+  cacheDelete(cacheKeys.progress(deckId));
+  const db = getDb();
+  const [owner] = await db
+    .select({ userId: decks.userId })
+    .from(decks)
+    .where(eq(decks.id, deckId))
+    .limit(1);
+  if (owner) invalidateModuleData(owner.userId, deckId);
+}
+
+async function invalidateProgressBySessionId(
+  sessionId: string,
+  kind: "study" | "quiz"
+): Promise<void> {
+  const db = getDb();
+  if (kind === "study") {
+    const [row] = await db
+      .select({ deckId: studySessions.deckId })
+      .from(studySessions)
+      .where(eq(studySessions.id, sessionId))
+      .limit(1);
+    if (row) await invalidateProgressForDeck(row.deckId);
+    return;
+  }
+
+  const [row] = await db
+    .select({ deckId: quizSessions.deckId })
+    .from(quizSessions)
+    .where(eq(quizSessions.id, sessionId))
+    .limit(1);
+  if (row) await invalidateProgressForDeck(row.deckId);
+}
+
 export async function getDeckProgress(deckId: string): Promise<DeckProgress> {
+  const key = cacheKeys.progress(deckId);
+  const cached = cacheGet<DeckProgress>(key);
+  if (cached) return cached;
+
   const db = getDb();
   const now = new Date();
 
@@ -104,7 +151,7 @@ export async function getDeckProgress(deckId: string): Promise<DeckProgress> {
     lastQuizPercent = Math.round((lastQuiz.score / lastQuiz.questionCount) * 100);
   }
 
-  return {
+  const progress: DeckProgress = {
     cardCount: stats?.total ?? 0,
     dueCount: Number(stats?.due ?? 0),
     newCount: Number(stats?.newCards ?? 0),
@@ -116,6 +163,9 @@ export async function getDeckProgress(deckId: string): Promise<DeckProgress> {
     activeStudySession,
     activeQuizSession,
   };
+
+  cacheSet(key, progress, CACHE_TTL.progressMs);
+  return progress;
 }
 
 async function abandonActiveStudySessions(deckId: string) {
@@ -151,6 +201,7 @@ export async function startStudySession(deckId: string, cardIds: string[]) {
     completedAt: null,
   });
 
+  await invalidateProgressForDeck(deckId);
   return { id, cardIds, currentIndex: 0, reviewedCount: 0 };
 }
 
@@ -182,6 +233,7 @@ export async function updateStudySession(
     .update(studySessions)
     .set({ currentIndex, reviewedCount })
     .where(eq(studySessions.id, sessionId));
+  await invalidateProgressBySessionId(sessionId, "study");
 }
 
 export async function completeStudySession(sessionId: string) {
@@ -190,6 +242,7 @@ export async function completeStudySession(sessionId: string) {
     .update(studySessions)
     .set({ status: "completed", completedAt: new Date() })
     .where(eq(studySessions.id, sessionId));
+  await invalidateProgressBySessionId(sessionId, "study");
 }
 
 export async function abandonStudySession(sessionId: string) {
@@ -223,6 +276,7 @@ export async function startQuizSession(
     completedAt: null,
   });
 
+  await invalidateProgressForDeck(deckId);
   return { id, questions, currentIndex: 0, score: 0, wrongCardIds: [] as string[], mode };
 }
 
@@ -271,6 +325,7 @@ export async function updateQuizSession(
   }
 
   await db.update(quizSessions).set(updates).where(eq(quizSessions.id, sessionId));
+  await invalidateProgressBySessionId(sessionId, "quiz");
 }
 
 export async function completeQuizSession(sessionId: string, score: number) {
@@ -279,6 +334,7 @@ export async function completeQuizSession(sessionId: string, score: number) {
     .update(quizSessions)
     .set({ status: "completed", completedAt: new Date(), score })
     .where(eq(quizSessions.id, sessionId));
+  await invalidateProgressBySessionId(sessionId, "quiz");
 }
 
 export async function abandonQuizSession(sessionId: string) {
@@ -287,6 +343,7 @@ export async function abandonQuizSession(sessionId: string) {
     .update(quizSessions)
     .set({ status: "completed", completedAt: new Date() })
     .where(eq(quizSessions.id, sessionId));
+  await invalidateProgressBySessionId(sessionId, "quiz");
 }
 
 export async function getCardsByIds(cardIds: string[]) {

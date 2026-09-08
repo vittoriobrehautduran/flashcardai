@@ -35,7 +35,9 @@ export function getDb() {
   return db;
 }
 
-// Idempotent migrations for older Neon databases.
+// Runs table/column fixes at most once per warm server process.
+// Do NOT call this on every API request — that wakes Neon and burns free CU-hours.
+// Prefer calling from login / rare bootstrap paths.
 export async function ensureAppSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
@@ -51,7 +53,6 @@ export async function ensureAppSchema(): Promise<void> {
         )
       `;
 
-      // Older installs may lack these columns
       await sql`ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS email text`;
       await sql`ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false`;
 
@@ -60,7 +61,10 @@ export async function ensureAppSchema(): Promise<void> {
       await sql`ALTER TABLE decks ALTER COLUMN user_id SET DEFAULT 'local'`;
       await sql`ALTER TABLE decks ALTER COLUMN user_id SET NOT NULL`;
 
-      // Seed known admin by email whenever that user exists in settings
+      // Helps list/filter modules by owner without scanning the whole table.
+      await sql`CREATE INDEX IF NOT EXISTS decks_user_id_idx ON decks (user_id)`;
+      await sql`CREATE INDEX IF NOT EXISTS cards_deck_id_idx ON cards (deck_id)`;
+
       await sql`
         UPDATE user_settings
         SET is_admin = true
@@ -76,7 +80,6 @@ export async function ensureAppSchema(): Promise<void> {
   await schemaReady;
 }
 
-// Back-compat alias used by settings helpers
 export async function ensureUserSettingsTable(): Promise<void> {
   await ensureAppSchema();
 }
