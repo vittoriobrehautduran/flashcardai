@@ -4,10 +4,13 @@ import {
   integer,
   doublePrecision,
   timestamp,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export const decks = pgTable("decks", {
   id: text("id").primaryKey(),
+  // Cognito sub (or "local" when auth is off)
+  userId: text("user_id").notNull().default("local"),
   name: text("name").notNull(),
   description: text("description"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
@@ -70,9 +73,11 @@ export const quizSessions = pgTable("quiz_sessions", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
-// Per-user app settings (Gemini key, etc.). userId = Cognito sub, or "local" when auth is off.
+// Per-user app settings. userId = Cognito sub, or "local" when auth is off.
 export const userSettings = pgTable("user_settings", {
   userId: text("user_id").primaryKey(),
+  email: text("email"),
+  isAdmin: boolean("is_admin").notNull().default(false),
   // AES-GCM ciphertext of the user's own Gemini API key (never store plaintext).
   geminiApiKeyEncrypted: text("gemini_api_key_encrypted"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),

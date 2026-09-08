@@ -49,7 +49,8 @@ export async function extractPdfTextWithOcr(buffer: Buffer): Promise<{
       ocrPages: visionText ? Array.from({ length: pageCount }, (_, i) => i + 1) : [],
     };
   } catch (error) {
-    console.error("Gemini PDF vision failed, using text layer only:", error);
+    const { logServerError } = await import("@/lib/safe-log");
+    logServerError("Gemini PDF vision failed, using text layer only", error);
     return {
       text: textLayer,
       pageCount,

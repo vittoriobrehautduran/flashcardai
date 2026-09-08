@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
-import { getDueCards, getDeck, submitReview } from "@/lib/decks";
+import { getDueCards, submitReview } from "@/lib/decks";
 import { Rating, type Grade } from "@/lib/fsrs";
 import { updateStudySession, completeStudySession } from "@/lib/progress";
+import { requireApiUser, requireOwnedDeck } from "@/lib/api-route";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const deck = await getDeck(id);
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
 
-  if (!deck) {
-    return NextResponse.json({ error: "Deck not found" }, { status: 404 });
-  }
+  const { id } = await params;
+  const owned = await requireOwnedDeck(id, auth.user.id);
+  if ("response" in owned) return owned.response;
 
   const cards = await getDueCards(id);
   return NextResponse.json({ cards });
@@ -22,7 +23,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
+
   const { id: deckId } = await params;
+  const owned = await requireOwnedDeck(deckId, auth.user.id);
+  if ("response" in owned) return owned.response;
+
   const body = await request.json();
   const cardId = body.cardId;
   const rating = body.rating as Grade;

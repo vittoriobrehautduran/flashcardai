@@ -69,6 +69,7 @@ export function ModalFooter({
   cancelLabel = "Cancel",
   loading = false,
   confirmDisabled = false,
+  confirmVariant = "primary",
 }: {
   onCancel: () => void;
   onConfirm: () => void;
@@ -76,11 +77,17 @@ export function ModalFooter({
   cancelLabel?: string;
   loading?: boolean;
   confirmDisabled?: boolean;
+  confirmVariant?: "primary" | "danger";
 }) {
   return (
   <>
-    <Button variant="secondary" onClick={onCancel}>{cancelLabel}</Button>
-    <Button onClick={onConfirm} loading={loading} disabled={confirmDisabled}>
+    <Button variant="secondary" onClick={onCancel} disabled={loading}>{cancelLabel}</Button>
+    <Button
+      variant={confirmVariant}
+      onClick={onConfirm}
+      loading={loading}
+      disabled={confirmDisabled}
+    >
       {confirmLabel}
     </Button>
   </>

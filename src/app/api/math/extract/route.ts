@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { extractTextFromPdf } from "@/lib/pdf";
 import { extractOrGenerateExercises, formatAiError } from "@/lib/math";
+import { enforceRateLimit, requireApiUser } from "@/lib/api-route";
 
 export async function POST(request: Request) {
   let language: "en" | "sv" = "sv";
+
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
+
+  const limited = enforceRateLimit(auth.user.id, "mathExtract");
+  if (limited) return limited;
 
   try {
     const formData = await request.formData();

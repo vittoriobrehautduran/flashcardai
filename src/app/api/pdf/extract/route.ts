@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { chunkText } from "@/lib/chunk-text";
 import { extractTextFromPdf } from "@/lib/pdf";
+import { enforceRateLimit, requireApiUser } from "@/lib/api-route";
+import { publicErrorMessage } from "@/lib/safe-log";
 
 export async function POST(request: Request) {
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
+
+  const limited = enforceRateLimit(auth.user.id, "pdfExtract");
+  if (limited) return limited;
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");
@@ -37,7 +45,9 @@ export async function POST(request: Request) {
       ocrPages,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to extract PDF";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: publicErrorMessage(error, "Failed to extract PDF") },
+      { status: 500 }
+    );
   }
 }

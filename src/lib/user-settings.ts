@@ -85,6 +85,8 @@ export async function saveUserGeminiApiKey(apiKey: string): Promise<void> {
       .insert(userSettings)
       .values({
         userId,
+        email: null,
+        isAdmin: false,
         geminiApiKeyEncrypted: encrypted,
         updatedAt: now,
       })
@@ -108,6 +110,8 @@ export async function clearUserGeminiApiKey(): Promise<void> {
       .insert(userSettings)
       .values({
         userId,
+        email: null,
+        isAdmin: false,
         geminiApiKeyEncrypted: null,
         updatedAt: now,
       })

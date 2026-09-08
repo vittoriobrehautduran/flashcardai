@@ -1,6 +1,6 @@
 import { eq, and, lte, count, sql, desc } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
-import { getDb } from "@/db";
+import { ensureAppSchema, getDb } from "@/db";
 import { decks, cards, cardScheduling, type Deck, type Card } from "@/db/schema";
 import {
   newFsrsCard,
@@ -9,6 +9,10 @@ import {
   schedulingFromFsrsCard,
   type Grade,
 } from "@/lib/fsrs";
+import {
+  isCurrentUserAdmin,
+  NON_ADMIN_MODULE_LIMIT,
+} from "@/lib/auth/require-user";
 
 export interface DeckWithStats extends Deck {
   cardCount: number;
@@ -16,11 +20,28 @@ export interface DeckWithStats extends Deck {
   newCount: number;
 }
 
-export async function listDecks(): Promise<DeckWithStats[]> {
+export class ModuleLimitError extends Error {
+  limit: number;
+
+  constructor(limit: number) {
+    super(
+      `Non-admin users can have at most ${limit} modules. Delete one to create another.`
+    );
+    this.name = "ModuleLimitError";
+    this.limit = limit;
+  }
+}
+
+export async function listDecks(userId: string): Promise<DeckWithStats[]> {
+  await ensureAppSchema();
   const db = getDb();
   const now = new Date();
 
-  const allDecks = await db.select().from(decks).orderBy(desc(decks.updatedAt));
+  const allDecks = await db
+    .select()
+    .from(decks)
+    .where(eq(decks.userId, userId))
+    .orderBy(desc(decks.updatedAt));
 
   const result: DeckWithStats[] = [];
   for (const deck of allDecks) {
@@ -45,17 +66,58 @@ export async function listDecks(): Promise<DeckWithStats[]> {
   return result;
 }
 
+export async function countDecksForUser(userId: string): Promise<number> {
+  await ensureAppSchema();
+  const db = getDb();
+  const [row] = await db
+    .select({ total: count() })
+    .from(decks)
+    .where(eq(decks.userId, userId));
+  return row?.total ?? 0;
+}
+
 export async function getDeck(id: string): Promise<Deck | undefined> {
+  await ensureAppSchema();
   const db = getDb();
   const [deck] = await db.select().from(decks).where(eq(decks.id, id)).limit(1);
   return deck;
 }
 
-export async function createDeck(name: string, description?: string): Promise<Deck> {
+// Only returns the deck if it belongs to this user.
+export async function getDeckForUser(
+  id: string,
+  userId: string
+): Promise<Deck | undefined> {
+  await ensureAppSchema();
   const db = getDb();
+  const [deck] = await db
+    .select()
+    .from(decks)
+    .where(and(eq(decks.id, id), eq(decks.userId, userId)))
+    .limit(1);
+  return deck;
+}
+
+export async function createDeck(
+  userId: string,
+  name: string,
+  description?: string
+): Promise<Deck> {
+  await ensureAppSchema();
+  const db = getDb();
+
+  const admin = await isCurrentUserAdmin(userId);
+  if (!admin) {
+    const existing = await countDecksForUser(userId);
+    if (existing >= NON_ADMIN_MODULE_LIMIT) {
+      throw new ModuleLimitError(NON_ADMIN_MODULE_LIMIT);
+    }
+  }
+
   const now = new Date();
   const deck: Deck = {
     id: uuid(),
+    userId,
     name,
     description: description ?? null,
     createdAt: now,
@@ -67,21 +129,27 @@ export async function createDeck(name: string, description?: string): Promise<De
 
 export async function updateDeck(
   id: string,
+  userId: string,
   name: string,
   description?: string
 ): Promise<Deck | undefined> {
+  await ensureAppSchema();
   const db = getDb();
   const now = new Date();
   await db
     .update(decks)
     .set({ name, description: description ?? null, updatedAt: now })
-    .where(eq(decks.id, id));
-  return getDeck(id);
+    .where(and(eq(decks.id, id), eq(decks.userId, userId)));
+  return getDeckForUser(id, userId);
 }
 
-export async function deleteDeck(id: string): Promise<void> {
+export async function deleteDeck(id: string, userId: string): Promise<boolean> {
+  await ensureAppSchema();
   const db = getDb();
-  await db.delete(decks).where(eq(decks.id, id));
+  const owned = await getDeckForUser(id, userId);
+  if (!owned) return false;
+  await db.delete(decks).where(and(eq(decks.id, id), eq(decks.userId, userId)));
+  return true;
 }
 
 export async function listCards(deckId: string): Promise<Card[]> {
@@ -138,9 +206,23 @@ export async function createCardsBatch(
   return created;
 }
 
-export async function deleteCard(cardId: string): Promise<void> {
+// Delete a card only if it belongs to a deck owned by this user.
+export async function deleteCardForUser(
+  cardId: string,
+  userId: string
+): Promise<boolean> {
+  await ensureAppSchema();
   const db = getDb();
+  const [row] = await db
+    .select({ cardId: cards.id })
+    .from(cards)
+    .innerJoin(decks, eq(cards.deckId, decks.id))
+    .where(and(eq(cards.id, cardId), eq(decks.userId, userId)))
+    .limit(1);
+
+  if (!row) return false;
   await db.delete(cards).where(eq(cards.id, cardId));
+  return true;
 }
 
 export interface StudyCard {

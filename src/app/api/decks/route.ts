@@ -1,19 +1,57 @@
 import { NextResponse } from "next/server";
-import { createDeck, listDecks } from "@/lib/decks";
+import { createDeck, listDecks, ModuleLimitError } from "@/lib/decks";
+import {
+  isCurrentUserAdmin,
+  NON_ADMIN_MODULE_LIMIT,
+} from "@/lib/auth/require-user";
+import { requireApiUser } from "@/lib/api-route";
+import { publicErrorMessage } from "@/lib/safe-log";
 
 export async function GET() {
-  const decks = await listDecks();
-  return NextResponse.json(decks);
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
+
+  const decks = await listDecks(auth.user.id);
+  const isAdmin = await isCurrentUserAdmin(auth.user.id);
+
+  return NextResponse.json({
+    decks,
+    meta: {
+      isAdmin,
+      moduleLimit: isAdmin ? null : NON_ADMIN_MODULE_LIMIT,
+      moduleCount: decks.length,
+    },
+  });
 }
 
 export async function POST(request: Request) {
-  const body = await request.json();
-  const name = body.name?.trim();
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
 
-  if (!name) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  try {
+    const body = await request.json();
+    const name = body.name?.trim();
+
+    if (!name) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    }
+
+    const deck = await createDeck(auth.user.id, name, body.description?.trim());
+    return NextResponse.json(deck, { status: 201 });
+  } catch (error) {
+    if (error instanceof ModuleLimitError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: "MODULE_LIMIT",
+          limit: error.limit,
+        },
+        { status: 403 }
+      );
+    }
+    return NextResponse.json(
+      { error: publicErrorMessage(error, "Failed to create module") },
+      { status: 500 }
+    );
   }
-
-  const deck = await createDeck(name, body.description?.trim());
-  return NextResponse.json(deck, { status: 201 });
 }

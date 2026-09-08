@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getDeck } from "@/lib/decks";
 import {
   getActiveQuizSession,
   startQuizSession,
@@ -8,17 +7,18 @@ import {
   abandonQuizSession,
 } from "@/lib/progress";
 import type { QuizQuestion } from "@/lib/quiz";
+import { requireApiUser, requireOwnedDeck } from "@/lib/api-route";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const deck = await getDeck(id);
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
 
-  if (!deck) {
-    return NextResponse.json({ error: "Deck not found" }, { status: 404 });
-  }
+  const { id } = await params;
+  const owned = await requireOwnedDeck(id, auth.user.id);
+  if ("response" in owned) return owned.response;
 
   const modeParam = new URL(request.url).searchParams.get("mode");
   const mode =
@@ -46,12 +46,12 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: deckId } = await params;
-  const deck = await getDeck(deckId);
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
 
-  if (!deck) {
-    return NextResponse.json({ error: "Deck not found" }, { status: 404 });
-  }
+  const { id: deckId } = await params;
+  const owned = await requireOwnedDeck(deckId, auth.user.id);
+  if ("response" in owned) return owned.response;
 
   const body = await request.json();
   const questions = body.questions as QuizQuestion[] | undefined;
@@ -86,12 +86,12 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: deckId } = await params;
-  const deck = await getDeck(deckId);
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
 
-  if (!deck) {
-    return NextResponse.json({ error: "Deck not found" }, { status: 404 });
-  }
+  const { id: deckId } = await params;
+  const owned = await requireOwnedDeck(deckId, auth.user.id);
+  if ("response" in owned) return owned.response;
 
   const body = await request.json();
   const sessionId = body.sessionId as string | undefined;
@@ -123,12 +123,12 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: deckId } = await params;
-  const deck = await getDeck(deckId);
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
 
-  if (!deck) {
-    return NextResponse.json({ error: "Deck not found" }, { status: 404 });
-  }
+  const { id: deckId } = await params;
+  const owned = await requireOwnedDeck(deckId, auth.user.id);
+  if ("response" in owned) return owned.response;
 
   const body = await request.json().catch(() => ({}));
   const sessionId = body.sessionId as string | undefined;

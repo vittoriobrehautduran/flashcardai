@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { formatOpenAiError, generateFlashcardsFromText } from "@/lib/openai";
+import { enforceRateLimit, requireApiUser } from "@/lib/api-route";
 
 export async function POST(request: Request) {
   let language: "en" | "sv" = "sv";
+
+  const auth = await requireApiUser();
+  if ("response" in auth) return auth.response;
+
+  const limited = enforceRateLimit(auth.user.id, "generate");
+  if (limited) return limited;
 
   try {
     const body = await request.json();
